@@ -13,7 +13,6 @@ dependencies = [
   "langchain",
   "langgraph",
   "google-generativeai",
-  "supabase-py",
   "sqlalchemy",
   "psycopg[binary]",
 ]
@@ -34,7 +33,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.uv]
-dev-dependencies = ["gradepilot[dev]"]
+dependency-groups = { dev = ["gradepilot[dev]"] }
 
 [tool.ruff]
 line-length = 88
