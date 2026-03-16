@@ -1,4 +1,4 @@
-## Technical Program Management Process
+## Workflow and Team Progress
 
 This document covers how we plan, estimate, track, and coordinate work for GradePilot. 
 
