@@ -7,6 +7,59 @@ GradePilot is an autonomous academic planning agent built primarily in Python. S
 
 This document summarises the architecture, DevOps tooling, and deployment pipeline used to build, test, and ship GradePilot.
 
+### Local setup and running
+
+- **Prerequisites**
+  - **Python**: 3.11 or newer (3.12 recommended).
+  - **Package manager**: `uv` or `pip` (examples below use `uv` first).
+  - **Git**: to clone the repository.
+
+- **Clone the repository**
+
+```bash
+git clone git@github.com:<your-org>/GradePilot.git
+cd GradePilot
+```
+
+- **Create a virtual environment and install dependencies**
+
+Using `uv` (preferred):
+
+```bash
+uv venv .venv
+source .venv/bin/activate
+uv pip install -e ".[dev]"
+```
+
+Using `pip` directly (if you are not using `uv`):
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+- **Configuration**
+  - All configuration is provided via environment variables (see **Configuration and Secrets** below).
+  - At minimum, ensure any required API keys and database URLs are exported in your shell or stored in a local `.env` file loaded by your tooling.
+
+- **Run the API locally**
+
+```bash
+uvicorn app.main:app --reload
+```
+
+The API will be available at `http://127.0.0.1:8000` with the interactive docs at `http://127.0.0.1:8000/docs`.
+
+- **Run tests and checks**
+
+```bash
+pytest
+ruff check .
+black . --check
+mypy .
+```
+
 ### Application Framework
 - **Backend**: FastAPI on Python 3.12, used for all server-side logic, REST endpoints, and AI orchestration. FastAPI’s async support, OpenAPI generation, and Pydantic integration are core to the design.
 - **AI Orchestration**: LangChain and LangGraph provide the orchestration layer between FastAPI and the model API.
