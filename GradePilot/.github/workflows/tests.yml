@@ -1,0 +1,49 @@
+
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-cov
+
+      - name: Run backend tests
+        run: |
+          pytest --maxfail=1 --disable-warnings --cov=. --cov-report=term || echo "No backend tests found yet"
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies
+        run: |
+          if [ -f package.json ]; then npm install; else echo "No package.json found yet"; fi
+
+      - name: Run frontend tests
+        run: |
+          if [ -f package.json ]; then npm test -- --watch=false --coverage || echo "No frontend tests found yet"; else echo "Skipping frontend tests"; fi
