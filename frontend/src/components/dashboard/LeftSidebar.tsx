@@ -1,4 +1,5 @@
 import React from "react";
+import UploadHub from "./UploadHub";
 
 export default function LeftSidebar() {
   return (
@@ -9,11 +10,7 @@ export default function LeftSidebar() {
         <p className="text-cyan-400/80 text-[9px] uppercase font-bold mt-1">Autonomous Agent</p>
       </div>
 
-      <div className="flex-1 flex items-center justify-center text-slate-500 text-sm border-2 border-dashed border-white/10 rounded-xl bg-white/5">
-        Left Sidebar Area
-        <br />
-        (Upload Hub coming soon)
-      </div>
+      <UploadHub />
     </aside>
   );
 }
