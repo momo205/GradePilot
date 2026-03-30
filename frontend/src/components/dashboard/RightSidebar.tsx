@@ -80,11 +80,38 @@ export default function RightSidebar() {
         </div>
       </div>
 
-      {/* Placeholder for Issue 21 */}
-      <div className="mt-4 pt-4 border-t border-white/5 pb-2">
-        <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-xs border border-dashed border-white/10 rounded-2xl bg-[#121422] text-center p-4">
-          <span className="font-bold text-slate-400 tracking-wider">UPCOMING BLOCKS</span>
-          <span className="text-[10px] mt-1 leading-relaxed opacity-75">Saved for <br/> Issue #21</span>
+      {/* Upcoming Blocks Section (Issue 21) */}
+      <div className="mt-4 pt-4 border-t border-white/5 pb-1">
+        <div className="flex items-center justify-between mb-4 px-1">
+          <h3 className="text-slate-500 text-[10px] font-extrabold uppercase tracking-[0.2em]">
+            Upcoming Blocks
+          </h3>
+          <button className="text-slate-500 hover:text-white transition-colors bg-white/5 p-1 rounded-md hover:bg-white/10">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          </button>
+        </div>
+        
+        <div className="space-y-2">
+          {/* Active/Next Block */}
+          <div className="flex items-center justify-between py-2.5 px-3 rounded-xl border border-[#36d3b7]/30 text-xs shadow-[0_0_15px_rgba(54,211,183,0.05)] bg-[#10121d]">
+            <span className="font-extrabold text-[#36d3b7] w-[4.5rem]">3:00 PM</span>
+            <span className="text-emerald-50 font-semibold flex-1 pl-3 border-l border-[#36d3b7]/20 truncate">Deep Work: CS 101</span>
+            <span className="text-[#36d3b7]/80 font-bold text-[10px] shrink-0">2h</span>
+          </div>
+          
+          {/* Future Block */}
+          <div className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-[#121422] border border-white/5 text-xs hover:border-white/10 transition-colors">
+            <span className="font-extrabold text-[#7364d9] w-[4.5rem]">6:30 PM</span>
+            <span className="text-slate-300 font-semibold flex-1 pl-3 border-l border-white/10 truncate">Review BIO 200</span>
+            <span className="text-slate-500 font-bold text-[10px] shrink-0">45m</span>
+          </div>
+
+          {/* Past/End Block */}
+          <div className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-[#121422] border border-transparent text-xs opacity-60">
+            <span className="font-extrabold text-slate-500 w-[4.5rem]">8:00 PM</span>
+            <span className="text-slate-400 font-semibold flex-1 pl-3 border-l border-white/10 truncate">Free Time Guarded</span>
+            <span className="text-slate-600 font-bold text-[10px] uppercase shrink-0">End</span>
+          </div>
         </div>
       </div>
     </aside>
