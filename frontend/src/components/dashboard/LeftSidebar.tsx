@@ -1,5 +1,10 @@
-import React from "react";
+'use client';
+
+import React, { useEffect, useRef, useState } from "react";
 import UploadHub from "./UploadHub";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 
 export default function LeftSidebar() {
   return (
@@ -32,14 +37,14 @@ export default function LeftSidebar() {
 
       {/* Main Upload Dropzone area */}
       <div className="flex-1 min-h-0 flex flex-col">
-         <UploadHub />
+        <UploadHub />
       </div>
 
       {/* Agent Command Footer Input */}
-      <div className="mt-auto pt-6 flex flex-col gap-3.5 pl-1">
+      <div className="pt-4 flex flex-col gap-3.5 pl-1">
         <h2 className="text-white text-[13px] font-bold tracking-wide flex items-center gap-2.5">
           <svg className="w-4 h-4 text-[#7364d9]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
           </svg>
           Agent Command
         </h2>
@@ -56,6 +61,87 @@ export default function LeftSidebar() {
           </button>
         </div>
       </div>
+
+      {/* User Menu */}
+      <UserMenu />
     </aside>
+  );
+}
+
+function UserMenu() {
+  const router = useRouter();
+  const supabase = createClient();
+  const [user, setUser] = useState<User | null>(null);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    router.push('/');
+    router.refresh();
+  };
+
+  const initials = user?.user_metadata?.full_name
+    ? user.user_metadata.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+    : user?.email?.[0].toUpperCase() ?? '?';
+
+  return (
+    <div ref={ref} className="relative mt-4">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-3 w-full p-3 rounded-2xl hover:bg-white/5 transition-colors border border-white/5"
+      >
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-[#0B0F2A] shrink-0"
+          style={{ background: 'linear-gradient(135deg, #6D4AFF, #00F5D4)' }}
+        >
+          {initials}
+        </div>
+        <div className="flex-1 text-left min-w-0">
+          <p className="text-white text-[13px] font-semibold truncate">
+            {user?.user_metadata?.full_name ?? 'My Account'}
+          </p>
+          <p className="text-slate-400 text-[11px] truncate">{user?.email}</p>
+        </div>
+        <svg
+          className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${open ? 'rotate-180' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#1a1f3a] border border-white/10 rounded-2xl shadow-xl overflow-hidden z-50">
+          <div className="px-4 py-3 border-b border-white/5">
+            <p className="text-white text-[13px] font-semibold truncate">
+              {user?.user_metadata?.full_name ?? 'My Account'}
+            </p>
+            <p className="text-slate-400 text-[11px] truncate">{user?.email}</p>
+          </div>
+          <button
+            onClick={signOut}
+            className="flex items-center gap-3 w-full px-4 py-3 text-[13px] text-[#FF4D6D] hover:bg-[#FF4D6D]/10 transition-colors font-semibold"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Sign Out
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

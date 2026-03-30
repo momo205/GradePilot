@@ -11,7 +11,7 @@ body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
-  overflow: hidden; /* Since it's a dashboard app, let's keep it fixed and handle scroll inside components */
+  /* overflow is managed per-page */
 }
 
 /* Custom Scrollbar for better appearance */
