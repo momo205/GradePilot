@@ -10,6 +10,8 @@ dependencies = [
   "fastapi",
   "uvicorn[standard]",
   "pydantic",
+  "httpx",
+  "python-jose[cryptography]",
   "langchain",
   "langgraph",
   "google-generativeai",

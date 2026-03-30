@@ -2,9 +2,12 @@ README.md
 pyproject.toml
 app/__init__.py
 app/main.py
+app/schemas.py
 gradepilot.egg-info/PKG-INFO
 gradepilot.egg-info/SOURCES.txt
 gradepilot.egg-info/dependency_links.txt
 gradepilot.egg-info/requires.txt
 gradepilot.egg-info/top_level.txt
+tests/test_auth.py
 tests/test_health.py
+tests/test_study_plan.py

@@ -1,10 +1,25 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
 
-export default function UploadHub() {
+type UploadHubProps = {
+  title?: string;
+  subtitle?: string;
+  accept?: string;
+  multiple?: boolean;
+  onFilesSelected?: (files: File[]) => void;
+};
+
+export default function UploadHub({
+  title = "Upload Hub",
+  subtitle = "Syllabi, PDFs, or Notes",
+  accept,
+  multiple = true,
+  onFilesSelected,
+}: UploadHubProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [fileList, setFileList] = useState<File[]>([]);
+  const inputId = useId();
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -23,11 +38,17 @@ export default function UploadHub() {
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const droppedFiles = Array.from(e.dataTransfer.files);
       setFileList((prev) => [...prev, ...droppedFiles]);
+      onFilesSelected?.(droppedFiles);
     }
   };
 
   const removeFile = (indexToRemove: number) => {
     setFileList((prev) => prev.filter((_, i) => i !== indexToRemove));
+  };
+
+  const openPicker = () => {
+    const el = document.getElementById(inputId) as HTMLInputElement | null;
+    el?.click();
   };
 
   return (
@@ -36,7 +57,7 @@ export default function UploadHub() {
         <svg className="w-3.5 h-3.5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
         </svg>
-        Upload Hub
+        {title}
       </h2>
 
       {/* Dropzone Area */}
@@ -44,6 +65,7 @@ export default function UploadHub() {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onClick={openPicker}
         className={`relative flex flex-col items-center justify-center text-center p-4 rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer overflow-hidden ${
           isDragging
             ? "border-cyan-400 bg-cyan-400/10 scale-[1.02]"
@@ -67,11 +89,24 @@ export default function UploadHub() {
           {isDragging ? "Drop Files Here!" : "Drag & Drop to Pilot"}
         </p>
         <p className="text-slate-500 text-[11px] mt-1.5 max-w-[140px] leading-relaxed relative z-10">
-          Syllabi, PDFs, or Notes
+          {subtitle}
         </p>
 
         {/* Hidden file input for clicking support later */}
-        <input type="file" multiple className="hidden" />
+        <input
+          id={inputId}
+          type="file"
+          accept={accept}
+          multiple={multiple}
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length === 0) return;
+            setFileList((prev) => [...prev, ...files]);
+            onFilesSelected?.(files);
+            e.target.value = "";
+          }}
+        />
       </div>
 
       {/* File List Preview */}

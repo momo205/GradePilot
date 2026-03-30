@@ -1,9 +1,32 @@
 "use client";
 
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import {
+  addNotes,
+  createClass,
+  createStudyPlan,
+  type ClassOut,
+  type NotesOut,
+  type StudyPlanOut,
+} from "@/lib/backend";
+import UploadHub from "@/components/dashboard/UploadHub";
 
 export default function DashboardPage() {
+  const [classTitle, setClassTitle] = useState("");
+  const [notesText, setNotesText] = useState("");
+  const [clazz, setClazz] = useState<ClassOut | null>(null);
+  const [notes, setNotes] = useState<NotesOut | null>(null);
+  const [plan, setPlan] = useState<StudyPlanOut | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canCreateClass = classTitle.trim().length > 0;
+  const canSubmitNotes = Boolean(clazz) && notesText.trim().length > 0;
+  const canGeneratePlan = Boolean(clazz) && Boolean(notes);
+
+  const schedule = useMemo(() => plan?.plan_json?.schedule ?? [], [plan]);
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -13,37 +36,28 @@ export default function DashboardPage() {
     >
       <header className="flex items-center justify-between mb-10 pl-2">
         <div>
-          <h1 className="text-[28px] font-extrabold tracking-tight text-white mb-2 leading-none">Your Active Plan</h1>
+          <h1 className="text-[28px] font-extrabold tracking-tight text-white mb-2 leading-none">
+            Create a Study Plan
+          </h1>
           <p className="text-slate-400 text-xs font-semibold tracking-wide">
-            Organized autonomously by GradePilot
+            Add your class notes/syllabus and generate a plan
           </p>
         </div>
-        <div className="flex flex-col items-end gap-2">
+        {plan ? (
           <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-bold shadow-inner shadow-emerald-500/10 backdrop-blur-md">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-            Optimum Schedule Generated
+            Plan Generated
           </div>
-          <button 
-            onClick={async () => {
-              try {
-                const { generateStudyPlan } = await import("../actions/generatePlan");
-                const res = await generateStudyPlan();
-                console.log("GEMINI ACTION RESULT:", res);
-                alert("Check console! Gemini Generated: " + res?.title);
-              } catch (e) {
-                console.error(e);
-                alert("Gemini call failed, check console");
-              }
-            }}
-            className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs font-bold transition-colors"
-          >
-            Test Gemini Action
-          </button>
-        </div>
+        ) : null}
       </header>
 
+      {error ? (
+        <div className="mb-6 mx-2 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          {error}
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch pb-6">
-        {/* Mock Card 1 */}
         <motion.div 
            initial={{ opacity: 0, y: 20 }}
            animate={{ opacity: 1, y: 0 }}
@@ -53,38 +67,56 @@ export default function DashboardPage() {
         >
           <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-[#7364d9]/10 to-transparent pointer-events-none opacity-40"></div>
           
-          <h2 className="text-lg font-extrabold text-white mb-6 tracking-wide relative z-10">CS 101: Data Structures</h2>
+          <h2 className="text-lg font-extrabold text-white mb-6 tracking-wide relative z-10">
+            1) Add your class
+          </h2>
           
-          <div className="space-y-5 mb-8 flex-1 relative z-10">
-            <label className="flex items-start gap-3.5 cursor-pointer group/item">
-              <input type="checkbox" className="mt-0.5 w-4 h-4 rounded appearance-none border border-white/20 bg-black/30 checked:bg-[#7364d9] checked:border-[#7364d9] transition-colors cursor-pointer shrink-0" />
-              <div>
-                <span className="text-[13px] font-semibold text-slate-200 block group-hover/item:text-white transition-colors leading-tight">Agent Scheduled: Read Ch. 4 tonight <span className="text-slate-500 font-medium">(2 hours)</span></span>
-                <span className="text-[9px] uppercase font-bold text-[#FF4D6D] mt-2 flex items-center gap-1.5 tracking-wider drop-shadow-[0_0_5px_rgba(255,77,109,0.3)]">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> 
-                  Action Required
+          <div className="space-y-4 mb-8 flex-1 relative z-10">
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                Class title
+              </label>
+              <input
+                value={classTitle}
+                onChange={(e) => setClassTitle(e.target.value)}
+                placeholder='e.g. "CS 101: Data Structures"'
+                className="mt-2 w-full bg-black/30 border border-white/10 rounded-xl py-3 px-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-[#00F5D4] focus:border-[#00F5D4] transition-all"
+              />
+            </div>
+
+            <div className="text-xs text-slate-400">
+              {clazz ? (
+                <span>
+                  Using class: <span className="text-white font-semibold">{clazz.title}</span>
                 </span>
-              </div>
-            </label>
-            <label className="flex items-start gap-3.5 cursor-pointer group/item">
-              <input type="checkbox" className="mt-0.5 w-4 h-4 rounded appearance-none border border-white/20 bg-black/30 checked:bg-[#7364d9] checked:border-[#7364d9] transition-colors cursor-pointer shrink-0" />
-              <div>
-                <span className="text-[13px] font-semibold text-slate-200 block group-hover/item:text-white transition-colors leading-tight">Homework 3 due in 2 days</span>
-                <span className="text-[9px] uppercase font-bold text-[#FF4D6D] mt-2 flex items-center gap-1.5 tracking-wider drop-shadow-[0_0_5px_rgba(255,77,109,0.3)]">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> 
-                  Action Required
-                </span>
-              </div>
-            </label>
+              ) : (
+                <span>Creates a class row in Supabase.</span>
+              )}
+            </div>
           </div>
           
-          <button className="relative z-10 w-full mt-auto py-3.5 rounded-xl bg-gradient-to-r from-[#7364d9] to-[#62EBD0] text-black font-extrabold text-sm shadow-[0_4px_20px_rgba(54,211,183,0.2)] hover:shadow-[0_4px_25px_rgba(54,211,183,0.4)] transition-all flex items-center justify-center gap-2 group/btn">
-            <svg className="w-4 h-4 group-hover/btn:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
-            Start Study Session
+          <button
+            disabled={!canCreateClass || loading}
+            onClick={async () => {
+              setError(null);
+              setLoading(true);
+              try {
+                const created = await createClass(classTitle.trim());
+                setClazz(created);
+                setNotes(null);
+                setPlan(null);
+              } catch (e: any) {
+                setError(e?.message ?? "Failed to create class");
+              } finally {
+                setLoading(false);
+              }
+            }}
+            className="relative z-10 w-full mt-auto py-3.5 rounded-xl bg-gradient-to-r from-[#7364d9] to-[#62EBD0] text-black font-extrabold text-sm shadow-[0_4px_20px_rgba(54,211,183,0.2)] hover:shadow-[0_4px_25px_rgba(54,211,183,0.4)] transition-all flex items-center justify-center gap-2 group/btn disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            Create class
           </button>
         </motion.div>
 
-        {/* Mock Card 2 */}
         <motion.div 
            initial={{ opacity: 0, y: 20 }}
            animate={{ opacity: 1, y: 0 }}
@@ -94,35 +126,73 @@ export default function DashboardPage() {
         >
           <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-[#36d3b7]/10 to-transparent pointer-events-none opacity-40"></div>
           
-          <h2 className="text-lg font-extrabold text-white mb-6 tracking-wide relative z-10">BIO 200: Genetics</h2>
+          <h2 className="text-lg font-extrabold text-white mb-6 tracking-wide relative z-10">
+            2) Drag & drop notes / syllabus
+          </h2>
           
-          <div className="space-y-5 mb-8 flex-1 relative z-10">
-            <label className="flex items-start gap-3.5 cursor-pointer opacity-50 relative group/item">
-              <input type="checkbox" defaultChecked className="mt-0.5 w-4 h-4 rounded bg-[#36d3b7] appearance-none flex items-center justify-center border-none shrink-0" />
-              <svg className="absolute w-4 h-4 text-[#141B3A] left-0 top-0.5 pointer-events-none p-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-              <div>
-                <span className="text-[13px] font-semibold text-slate-300 block line-through leading-tight">Review mitosis vs meiosis flashcards</span>
-              </div>
-            </label>
-            <label className="flex items-start gap-3.5 cursor-pointer group/item">
-              <input type="checkbox" className="mt-0.5 w-4 h-4 rounded appearance-none border border-white/20 bg-black/30 checked:bg-[#7364d9] checked:border-[#7364d9] transition-colors cursor-pointer shrink-0" />
-              <div>
-                <span className="text-[13px] font-semibold text-slate-200 block group-hover/item:text-white transition-colors leading-tight">Lab Report 2 draft due Friday</span>
-                <span className="text-[9px] uppercase font-bold text-[#FF4D6D] mt-2 flex items-center gap-1.5 tracking-wider drop-shadow-[0_0_5px_rgba(255,77,109,0.3)]">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> 
-                  Action Required
+          <div className="space-y-4 mb-8 flex-1 relative z-10">
+            <UploadHub
+              title="Upload notes"
+              subtitle="Drop .txt/.md/.pdf (we extract text from txt/md for now)"
+              accept=".txt,.md,.pdf"
+              multiple={true}
+              onFilesSelected={async (files) => {
+                setError(null);
+                const textParts: string[] = [];
+                for (const f of files) {
+                  const lower = f.name.toLowerCase();
+                  if (lower.endsWith(".txt") || lower.endsWith(".md")) {
+                    textParts.push(`--- ${f.name} ---\n${await f.text()}`);
+                  } else if (lower.endsWith(".pdf")) {
+                    textParts.push(`--- ${f.name} ---\n[PDF uploaded: text extraction not implemented yet]`);
+                  } else {
+                    textParts.push(`--- ${f.name} ---\n[Unsupported file type]`);
+                  }
+                }
+                setNotesText((prev) => (prev ? `${prev}\n\n${textParts.join("\n\n")}` : textParts.join("\n\n")));
+              }}
+            />
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                Extracted text preview
+              </p>
+              <pre className="whitespace-pre-wrap text-xs text-slate-200 max-h-32 overflow-y-auto custom-scrollbar">
+                {notesText || "Drop a .txt/.md file to populate notes here."}
+              </pre>
+            </div>
+            <div className="text-xs text-slate-400">
+              {notes ? (
+                <span>
+                  Notes saved: <span className="text-white font-semibold">{new Date(notes.created_at).toLocaleString()}</span>
                 </span>
-              </div>
-            </label>
+              ) : (
+                <span>Stores notes in Supabase for the selected class.</span>
+              )}
+            </div>
           </div>
           
-          <button className="relative z-10 w-full mt-auto py-3.5 rounded-xl bg-gradient-to-r from-[#7364d9] to-[#62EBD0] text-black font-extrabold text-sm shadow-[0_4px_20px_rgba(54,211,183,0.2)] hover:shadow-[0_4px_25px_rgba(54,211,183,0.4)] transition-all flex items-center justify-center gap-2 group/btn">
-            <svg className="w-4 h-4 group-hover/btn:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
-            Start Study Session
+          <button
+            disabled={!canSubmitNotes || loading}
+            onClick={async () => {
+              if (!clazz) return;
+              setError(null);
+              setLoading(true);
+              try {
+                const created = await addNotes(clazz.id, notesText.trim());
+                setNotes(created);
+                setPlan(null);
+              } catch (e: any) {
+                setError(e?.message ?? "Failed to save notes");
+              } finally {
+                setLoading(false);
+              }
+            }}
+            className="relative z-10 w-full mt-auto py-3.5 rounded-xl bg-gradient-to-r from-[#7364d9] to-[#62EBD0] text-black font-extrabold text-sm shadow-[0_4px_20px_rgba(54,211,183,0.2)] hover:shadow-[0_4px_25px_rgba(54,211,183,0.4)] transition-all flex items-center justify-center gap-2 group/btn disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            Save notes
           </button>
         </motion.div>
-        
-        {/* Mock Card 3 */}
+
         <motion.div 
            initial={{ opacity: 0, y: 20 }}
            animate={{ opacity: 1, y: 0 }}
@@ -132,34 +202,90 @@ export default function DashboardPage() {
         >
           <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-white/5 to-transparent pointer-events-none opacity-40"></div>
           
-          <h2 className="text-lg font-extrabold text-white mb-6 tracking-wide relative z-10">MATH 220: Linear Algebra</h2>
+          <h2 className="text-lg font-extrabold text-white mb-6 tracking-wide relative z-10">
+            3) Generate plan
+          </h2>
           
-          <div className="space-y-4 mb-8 flex-1 relative z-10">
-            <label className="flex items-start gap-3.5 cursor-pointer group/item">
-              <input type="checkbox" className="mt-0.5 w-4 h-4 rounded appearance-none border border-white/20 bg-black/30 checked:bg-[#7364d9] checked:border-[#7364d9] transition-colors cursor-pointer shrink-0" />
-              <div>
-                <span className="text-[13px] font-semibold text-slate-200 block group-hover/item:text-white transition-colors leading-tight">Agent: Re-watch lecture on Eigenvectors</span>
-              </div>
-            </label>
+          <div className="space-y-3 mb-8 flex-1 relative z-10">
+            {plan ? (
+              <>
+                <p className="text-white text-sm font-extrabold">{plan.plan_json.title}</p>
+                <div className="flex flex-wrap gap-2">
+                  {plan.plan_json.goals?.slice(0, 4).map((g) => (
+                    <span
+                      key={g}
+                      className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-full bg-white/5 border border-white/10 text-slate-300"
+                    >
+                      {g}
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-slate-400 text-sm">
+                This calls the backend AI endpoint and stores the plan in Supabase.
+              </p>
+            )}
           </div>
           
-          <button className="relative z-10 w-full mt-auto py-3.5 rounded-xl bg-gradient-to-r from-[#7364d9] to-[#62EBD0] text-black font-extrabold text-sm shadow-[0_4px_20px_rgba(54,211,183,0.2)] hover:shadow-[0_4px_25px_rgba(54,211,183,0.4)] transition-all flex items-center justify-center gap-2 group/btn">
-            <svg className="w-4 h-4 group-hover/btn:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
-            Start Study Session
+          <button
+            disabled={!canGeneratePlan || loading}
+            onClick={async () => {
+              if (!clazz || !notes) return;
+              setError(null);
+              setLoading(true);
+              try {
+                const created = await createStudyPlan(clazz.id, notes.id);
+                setPlan(created);
+              } catch (e: any) {
+                setError(e?.message ?? "Failed to generate plan");
+              } finally {
+                setLoading(false);
+              }
+            }}
+            className="relative z-10 w-full mt-auto py-3.5 rounded-xl bg-gradient-to-r from-[#7364d9] to-[#62EBD0] text-black font-extrabold text-sm shadow-[0_4px_20px_rgba(54,211,183,0.2)] hover:shadow-[0_4px_25px_rgba(54,211,183,0.4)] transition-all flex items-center justify-center gap-2 group/btn disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            Generate study plan
           </button>
         </motion.div>
 
-        {/* Empty State / Wait Card */}
         <motion.div 
            initial={{ opacity: 0, scale: 0.95 }}
            animate={{ opacity: 1, scale: 1 }}
            transition={{ duration: 0.5, delay: 0.6 }}
-           className="bg-transparent border-2 border-dashed border-white/5 hover:border-[#36d3b7]/20 hover:bg-[#36d3b7]/[0.02] transition-colors rounded-[1.25rem] p-7 flex flex-col items-center justify-center gap-4 text-center min-h-[280px] cursor-pointer"
+           className="bg-transparent border-2 border-dashed border-white/5 hover:border-[#36d3b7]/20 hover:bg-[#36d3b7]/[0.02] transition-colors rounded-[1.25rem] p-7 flex flex-col items-center justify-center gap-4 text-center min-h-[280px]"
         >
           <div className="w-12 h-12 rounded-full border border-white/5 bg-white/5 flex items-center justify-center">
             <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
           </div>
-          <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold">Agent is waiting for more classes</p>
+          {plan ? (
+            <div className="w-full text-left">
+              <p className="text-slate-400 text-[10px] uppercase tracking-widest font-bold mb-3">
+                Schedule
+              </p>
+              <div className="space-y-3 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                {schedule.map((d) => (
+                  <div
+                    key={d.day}
+                    className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                  >
+                    <p className="text-white text-sm font-extrabold mb-2">{d.day}</p>
+                    <ul className="space-y-1.5">
+                      {d.tasks.map((t) => (
+                        <li key={t} className="text-slate-300 text-xs">
+                          - {t}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold">
+              Generate a plan to see the schedule
+            </p>
+          )}
         </motion.div>
 
       </div>

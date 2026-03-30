@@ -21,7 +21,7 @@ export default function RightSidebar() {
         <div className="absolute left-[8px] top-6 bottom-8 w-px bg-white/[0.08]"></div>
 
         <div className="space-y-7 pb-4">
-          {/* Timeline Item 1 */}
+          {/* Placeholder activity timeline (backend events later) */}
           <div className="relative pl-9">
             <div className="absolute left-0 top-1.5 bg-[#161825] border border-white/10 rounded-full text-slate-400 p-1 flex items-center justify-center z-10 shadow-sm">
               <svg className="w-[10px] h-[10px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
