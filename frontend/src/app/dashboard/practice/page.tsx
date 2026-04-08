@@ -1,20 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, ChevronDown, Eye, EyeOff } from 'lucide-react';
-
-const CLASSES = [
-  'CS 101: Data Structures',
-  'BIO 200: Genetics',
-  'MATH 220: Linear Algebra',
-];
-
-const TOPICS: Record<string, string[]> = {
-  'CS 101: Data Structures': ['Arrays & Linked Lists', 'Trees & Graphs', 'Sorting Algorithms', 'Dynamic Programming'],
-  'BIO 200: Genetics': ['Mitosis & Meiosis', 'DNA Replication', 'Mendelian Genetics', 'Gene Expression'],
-  'MATH 220: Linear Algebra': ['Vectors & Matrices', 'Eigenvalues & Eigenvectors', 'Linear Transformations', 'Determinants'],
-};
+import { listClasses, type ClassOut } from '@/lib/backend';
 
 const DIFFICULTIES = ['Easy', 'Medium', 'Hard'];
 const QUESTION_COUNTS = [3, 5, 10];
@@ -28,56 +17,37 @@ const MOCK_QUESTIONS: Record<string, Question[]> = {
     { q: 'How do you detect a cycle in a linked list?', a: "Use Floyd's cycle detection algorithm (slow/fast pointers). If they meet, a cycle exists." },
     { q: 'What is the time complexity of inserting at the head of a singly linked list?', a: 'O(1) — just update the head pointer.' },
     { q: 'What is the difference between a stack and a queue?', a: 'Stack is LIFO (Last In First Out); Queue is FIFO (First In First Out).' },
-    { q: 'How do you reverse a singly linked list in-place?', a: 'Iterate through the list, reversing each next pointer. Track prev, curr, and next pointers.' },
-    { q: 'What is the space complexity of a linked list with n elements?', a: 'O(n) — each node stores data and a pointer.' },
-    { q: 'What is a doubly linked list?', a: 'A linked list where each node has pointers to both the next and previous nodes.' },
-    { q: 'When would you prefer an array over a linked list?', a: 'When you need fast random access or cache-friendly sequential traversal.' },
-    { q: 'What is the time complexity of searching for an element in an unsorted linked list?', a: 'O(n) — you must traverse the list sequentially.' },
-  ],
-  'Trees & Graphs': [
-    { q: 'What is the difference between a tree and a graph?', a: 'A tree is a connected acyclic graph with n nodes and n-1 edges. Graphs can have cycles.' },
-    { q: 'What is the time complexity of BFS and DFS?', a: 'Both are O(V + E) where V is vertices and E is edges.' },
-    { q: 'What is a balanced binary search tree?', a: 'A BST where the height difference between left and right subtrees is at most 1 for every node.' },
-    { q: 'What is an in-order traversal of a BST?', a: 'Left → Root → Right. For a BST, this produces elements in sorted order.' },
-    { q: 'What is Dijkstra\'s algorithm used for?', a: 'Finding the shortest path from a source node to all other nodes in a weighted graph.' },
-    { q: 'What is the height of a complete binary tree with n nodes?', a: 'O(log n).' },
-    { q: 'What is a heap?', a: 'A complete binary tree satisfying the heap property: parent ≥ children (max-heap) or parent ≤ children (min-heap).' },
-    { q: 'What is topological sorting?', a: 'A linear ordering of vertices in a DAG such that for every edge u→v, u comes before v.' },
-    { q: 'What is the difference between DFS and BFS?', a: 'DFS uses a stack and explores depth-first; BFS uses a queue and explores level by level.' },
-    { q: 'What is a spanning tree?', a: 'A subgraph that includes all vertices of the graph with minimum edges and no cycles.' },
-  ],
-  'Mitosis & Meiosis': [
-    { q: 'What is the main difference between mitosis and meiosis?', a: 'Mitosis produces 2 identical diploid cells; meiosis produces 4 genetically unique haploid cells.' },
-    { q: 'During which phase do chromosomes line up at the cell equator?', a: 'Metaphase.' },
-    { q: 'What is crossing over and when does it occur?', a: 'Exchange of genetic material between homologous chromosomes; occurs during Prophase I of meiosis.' },
-    { q: 'How many chromosomes does a human haploid cell have?', a: '23 chromosomes.' },
-    { q: 'What is the purpose of meiosis in sexual reproduction?', a: 'To produce gametes with half the chromosome number, maintaining the species chromosome count after fertilisation.' },
-  ],
-  'Eigenvalues & Eigenvectors': [
-    { q: 'What is an eigenvector?', a: 'A non-zero vector v such that Av = λv for some scalar λ (the eigenvalue).' },
-    { q: 'How do you find eigenvalues of a matrix A?', a: 'Solve the characteristic equation det(A - λI) = 0.' },
-    { q: 'What does it mean if a matrix has a zero eigenvalue?', a: 'The matrix is singular (non-invertible) and its determinant is 0.' },
-    { q: 'What is the geometric multiplicity of an eigenvalue?', a: 'The dimension of the eigenspace (null space of A - λI).' },
-    { q: 'When is a matrix diagonalisable?', a: 'When it has n linearly independent eigenvectors (i.e. algebraic multiplicity equals geometric multiplicity for all eigenvalues).' },
   ],
 };
 
 function getMockQuestions(topic: string, count: number, difficulty: string): Question[] {
   const pool = MOCK_QUESTIONS[topic] ?? [
-    { q: `Explain a key concept in ${topic}.`, a: `A core principle of ${topic} involves understanding the fundamental relationships between its components.` },
-    { q: `What is the most important formula or rule in ${topic}?`, a: `The foundational rule in ${topic} defines how elements interact under standard conditions.` },
-    { q: `Give an example application of ${topic}.`, a: `${topic} is applied in real-world scenarios to solve problems efficiently and accurately.` },
+    { q: `What is the definition of ${topic}?`, a: `${topic} refers to a fundamental concept that defines the core principles and relationships within its domain.` },
+    { q: `Why is ${topic} important?`, a: `${topic} is important because it forms the foundation for understanding more advanced concepts in the field.` },
+    { q: `Give an example of ${topic} in practice.`, a: `A practical example of ${topic} can be seen when applying its principles to solve real-world problems efficiently.` },
+    { q: `What are the key components of ${topic}?`, a: `The key components of ${topic} include its core elements, their interactions, and the rules governing their behaviour.` },
+    { q: `How does ${topic} relate to other concepts in the field?`, a: `${topic} connects to other concepts by sharing foundational principles and building upon or extending them.` },
+    { q: `What is a common misconception about ${topic}?`, a: `A common misconception is that ${topic} is more complex than it is — in reality it follows a clear set of rules.` },
+    { q: `How would you explain ${topic} to a beginner?`, a: `To a beginner, ${topic} can be explained as a structured way of thinking about a specific problem or concept.` },
+    { q: `What problem does ${topic} solve?`, a: `${topic} solves the problem of efficiently organising or processing information within its domain.` },
+    { q: `What are the limitations of ${topic}?`, a: `The limitations of ${topic} include edge cases where its assumptions break down or where it becomes inefficient.` },
+    { q: `How has ${topic} evolved over time?`, a: `${topic} has evolved as new research and practical applications revealed better approaches and deeper understanding.` },
   ];
-
-  // Shuffle deterministically based on difficulty for variety
   const offset = difficulty === 'Easy' ? 0 : difficulty === 'Medium' ? 2 : 4;
   const rotated = [...pool.slice(offset), ...pool.slice(0, offset)];
-  return rotated.slice(0, Math.min(count, rotated.length));
+  // Cycle through pool to fill requested count
+  const result: Question[] = [];
+  for (let i = 0; i < count; i++) {
+    result.push(rotated[i % rotated.length]);
+  }
+  return result;
 }
 
 export default function PracticePage() {
-  const [selectedClass, setSelectedClass] = useState(CLASSES[0]);
-  const [selectedTopic, setSelectedTopic] = useState(TOPICS[CLASSES[0]][0]);
+  const [classes, setClasses] = useState<ClassOut[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState(true);
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [topic, setTopic] = useState('');
   const [difficulty, setDifficulty] = useState('Medium');
   const [count, setCount] = useState(5);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -85,21 +55,19 @@ export default function PracticePage() {
   const [allRevealed, setAllRevealed] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  const handleClassChange = (cls: string) => {
-    setSelectedClass(cls);
-    setSelectedTopic(TOPICS[cls][0]);
-    setQuestions([]);
-    setRevealed(new Set());
-    setAllRevealed(false);
-  };
+  useEffect(() => {
+    listClasses()
+      .then(setClasses)
+      .finally(() => setLoadingClasses(false));
+  }, []);
 
   const handleGenerate = async () => {
+    if (!topic.trim()) return;
     setGenerating(true);
     setRevealed(new Set());
     setAllRevealed(false);
-    // Simulate network delay
     await new Promise((r) => setTimeout(r, 900));
-    setQuestions(getMockQuestions(selectedTopic, count, difficulty));
+    setQuestions(getMockQuestions(topic.trim(), count, difficulty));
     setGenerating(false);
   };
 
@@ -128,17 +96,15 @@ export default function PracticePage() {
       transition={{ duration: 0.5 }}
       className="pt-3 pb-12 px-2 max-w-[860px] mx-auto w-full"
     >
-      {/* Header */}
       <header className="mb-8 pl-2">
         <h1 className="text-[28px] font-extrabold tracking-tight text-white mb-2 leading-none">
           Practice Generator
         </h1>
         <p className="text-slate-400 text-xs font-semibold tracking-wide">
-          Select a class, topic, and difficulty — then generate a practice set
+          Select a class, enter a topic, and generate a practice set
         </p>
       </header>
 
-      {/* Config card */}
       <div className="bg-[#141B3A]/50 backdrop-blur-xl border border-white/5 rounded-[1.25rem] p-6 mb-6 shadow-[0_10px_40px_rgba(0,0,0,0.3)]">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
           {/* Class */}
@@ -146,11 +112,13 @@ export default function PracticePage() {
             <label className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2 block">Class</label>
             <div className="relative">
               <select
-                value={selectedClass}
-                onChange={(e) => handleClassChange(e.target.value)}
-                className="w-full appearance-none bg-black/30 border border-white/10 rounded-xl py-3 pl-4 pr-10 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#00F5D4] focus:border-[#00F5D4] transition-all cursor-pointer"
+                value={selectedClassId}
+                onChange={(e) => { setSelectedClassId(e.target.value); setQuestions([]); }}
+                disabled={loadingClasses}
+                className="w-full appearance-none bg-black/30 border border-white/10 rounded-xl py-3 pl-4 pr-10 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#00F5D4] focus:border-[#00F5D4] transition-all cursor-pointer disabled:opacity-50"
               >
-                {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
+                <option value="">{loadingClasses ? 'Loading...' : 'Select a class...'}</option>
+                {classes.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             </div>
@@ -159,16 +127,12 @@ export default function PracticePage() {
           {/* Topic */}
           <div>
             <label className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2 block">Topic</label>
-            <div className="relative">
-              <select
-                value={selectedTopic}
-                onChange={(e) => { setSelectedTopic(e.target.value); setQuestions([]); }}
-                className="w-full appearance-none bg-black/30 border border-white/10 rounded-xl py-3 pl-4 pr-10 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#00F5D4] focus:border-[#00F5D4] transition-all cursor-pointer"
-              >
-                {TOPICS[selectedClass].map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-            </div>
+            <input
+              value={topic}
+              onChange={(e) => { setTopic(e.target.value); setQuestions([]); }}
+              placeholder='e.g. "Sorting Algorithms"'
+              className="w-full bg-black/30 border border-white/10 rounded-xl py-3 px-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-[#00F5D4] focus:border-[#00F5D4] transition-all"
+            />
           </div>
 
           {/* Difficulty */}
@@ -214,7 +178,7 @@ export default function PracticePage() {
 
         <button
           onClick={handleGenerate}
-          disabled={generating}
+          disabled={generating || !selectedClassId || !topic.trim()}
           className="w-full py-3.5 rounded-xl font-extrabold text-sm text-[#0B0F2A] flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_4px_20px_rgba(109,74,255,0.3)]"
           style={{ background: 'linear-gradient(135deg, #6D4AFF, #00F5D4)' }}
         >
@@ -235,7 +199,6 @@ export default function PracticePage() {
         </button>
       </div>
 
-      {/* Questions */}
       <AnimatePresence>
         {questions.length > 0 && (
           <motion.div
@@ -244,10 +207,9 @@ export default function PracticePage() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4 }}
           >
-            {/* Show all answers toggle */}
             <div className="flex items-center justify-between mb-4 pl-1">
               <p className="text-slate-400 text-xs font-semibold tracking-wide">
-                {questions.length} question{questions.length !== 1 ? 's' : ''} · {selectedTopic} · {difficulty}
+                {questions.length} question{questions.length !== 1 ? 's' : ''} · {topic} · {difficulty}
               </p>
               <button
                 onClick={handleShowAll}
@@ -261,13 +223,12 @@ export default function PracticePage() {
             <div className="flex flex-col gap-3">
               {questions.map((q, i) => (
                 <motion.div
-                  key={`${selectedTopic}-${i}`}
+                  key={`${topic}-${i}`}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: i * 0.06 }}
                   className="bg-[#141B3A]/50 backdrop-blur-xl border border-white/5 rounded-[1.25rem] overflow-hidden"
                 >
-                  {/* Question row */}
                   <button
                     onClick={() => toggleReveal(i)}
                     className="w-full flex items-start gap-4 p-5 text-left hover:bg-white/[0.02] transition-colors group"
@@ -284,7 +245,6 @@ export default function PracticePage() {
                     </span>
                   </button>
 
-                  {/* Answer reveal */}
                   <AnimatePresence>
                     {revealed.has(i) && (
                       <motion.div

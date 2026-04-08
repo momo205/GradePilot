@@ -86,11 +86,9 @@ export default function DashboardPage() {
 
             <div className="text-xs text-slate-400">
               {clazz ? (
-                <span>
-                  Using class: <span className="text-white font-semibold">{clazz.title}</span>
-                </span>
+                <span className="text-[#00F5D4] font-semibold">✓ &quot;{clazz.title}&quot; added</span>
               ) : (
-                <span>Creates a class row in Supabase.</span>
+                <span>Enter a class title and click Create class.</span>
               )}
             </div>
           </div>

@@ -105,6 +105,10 @@ export type StudyPlanOut = {
   created_at: string;
 };
 
+export function listClasses() {
+  return backendFetch<ClassOut[]>('/classes');
+}
+
 export function createClass(title: string) {
   return backendFetch<ClassOut>('/classes', {
     method: 'POST',

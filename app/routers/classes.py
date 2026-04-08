@@ -28,6 +28,15 @@ def _user_uuid(user: CurrentUser) -> uuid.UUID:
         raise HTTPException(status_code=401, detail="Invalid user id")
 
 
+@router.get("", response_model=list[ClassOut])
+def list_classes(
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[ClassOut]:
+    classes = crud.list_classes(db=db, user_id=_user_uuid(user))
+    return [ClassOut.model_validate(c) for c in classes]
+
+
 @router.post("", response_model=ClassOut)
 def create_class(
     payload: ClassCreate,

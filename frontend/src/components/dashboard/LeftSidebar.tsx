@@ -97,6 +97,7 @@ function NavLink({ href, label, icon }: { href: string; label: string; icon: Rea
   );
 }
 
+function UserMenu() {
   const router = useRouter();
   const supabase = createClient();
   const [user, setUser] = useState<User | null>(null);
