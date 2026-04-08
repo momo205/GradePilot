@@ -14,8 +14,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install uv && uv sync --extra dev
-      - run: uv run ruff check . && uv run black --check . && uv run mypy .
+      - run: pip install -e ".[dev]"
+      - run: ruff check . && black --check . && mypy .
 
   test:
     runs-on: ubuntu-latest
@@ -24,6 +24,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install uv && uv sync --extra dev
-      - run: uv run pytest --cov=app --cov-fail-under=80
+      - run: pip install -e ".[dev]"
+      - run: pytest --cov=app --cov-fail-under=80
 
