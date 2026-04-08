@@ -65,7 +65,11 @@ def generate_practice_questions(
             },
         )
         raw = resp.text or ""
+        logger.info("practice_llm_response model=%s chars=%s preview=%r", model_name, len(raw), raw[:300])
         data = json.loads(raw)
+        # Handle both {"questions": [...]} and direct list [...]
+        if isinstance(data, list):
+            data = {"questions": data}
         parsed = PracticeQuestionsAI.model_validate(data)
         return [q.model_dump() for q in parsed.questions]
     except (json.JSONDecodeError, ValidationError) as e:
