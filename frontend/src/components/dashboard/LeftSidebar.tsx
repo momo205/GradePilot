@@ -3,7 +3,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import UploadHub from "./UploadHub";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 
 export default function LeftSidebar() {
@@ -21,6 +22,16 @@ export default function LeftSidebar() {
           <p className="text-[#36d3b7] text-[10px] tracking-wide font-bold mt-1">Autonomous Agent</p>
         </div>
       </div>
+
+      {/* Nav Links */}
+      <nav className="flex flex-col gap-1 mb-5">
+        <NavLink href="/dashboard" label="Study Plan" icon={
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+        } />
+        <NavLink href="/dashboard/practice" label="Practice" icon={
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+        } />
+      </nav>
 
       {/* Sync Google Calendar Button */}
       <button className="flex items-center justify-between w-full py-4 px-5 rounded-[1.25rem] bg-[#23283c] hover:bg-[#2b3047] border border-white/[0.03] transition-colors mb-7 shadow-sm group">
@@ -68,7 +79,24 @@ export default function LeftSidebar() {
   );
 }
 
-function UserMenu() {
+function NavLink({ href, label, icon }: { href: string; label: string; icon: React.ReactNode }) {
+  const pathname = usePathname();
+  const active = pathname === href;
+  return (
+    <Link
+      href={href}
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all ${
+        active
+          ? 'bg-[#00F5D4]/10 text-[#00F5D4] border border-[#00F5D4]/20'
+          : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+      }`}
+    >
+      {icon}
+      {label}
+    </Link>
+  );
+}
+
   const router = useRouter();
   const supabase = createClient();
   const [user, setUser] = useState<User | null>(null);
