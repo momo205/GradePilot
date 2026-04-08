@@ -8,7 +8,7 @@ import google.generativeai as genai
 from pydantic import ValidationError
 
 from app.core.config import get_settings
-from app.schemas import PracticeQuestionsAI
+from app.schemas import PracticeQuestion, PracticeQuestionsAI
 
 logger = logging.getLogger("gradepilot.ai")
 
@@ -45,7 +45,7 @@ Generate exactly {count} questions.
 
 def generate_practice_questions(
     *, class_title: str, topic: str, count: int, difficulty: str
-) -> list[dict[str, Any]]:
+) -> list[PracticeQuestion]:
     settings = get_settings()
     if not settings.google_api_key:
         raise PracticeGenerationError("GOOGLE_API_KEY is not configured")
@@ -58,6 +58,7 @@ def generate_practice_questions(
         class_title=class_title, topic=topic, count=count, difficulty=difficulty
     )
 
+    raw = ""
     try:
         resp = model.generate_content(
             prompt,
@@ -78,9 +79,9 @@ def generate_practice_questions(
         if isinstance(data, list):
             data = {"questions": data}
         parsed = PracticeQuestionsAI.model_validate(data)
-        return [q.model_dump() for q in parsed.questions]
+        return parsed.questions
     except (json.JSONDecodeError, ValidationError) as e:
-        preview = raw[:500] if "raw" in locals() else ""
+        preview = raw[:500]
         logger.warning(
             "practice_parse_failed err=%s preview=%r",
             e.__class__.__name__,

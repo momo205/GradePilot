@@ -36,8 +36,8 @@ export default function PracticeResultsPage() {
       ]);
       setQuestions(data.questions);
       setClassName(classes.find((c) => c.id === classId)?.title ?? '');
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to generate questions');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to generate questions');
     } finally {
       setLoading(false);
     }
