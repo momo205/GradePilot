@@ -9,6 +9,13 @@ from sqlalchemy.orm import Session
 from app.db.models import Class, ClassNotes, StudyPlan
 
 
+def list_classes(*, db: Session, user_id: uuid.UUID) -> list[Class]:
+    stmt = (
+        select(Class).where(Class.user_id == user_id).order_by(desc(Class.created_at))
+    )
+    return list(db.execute(stmt).scalars().all())
+
+
 def create_class(*, db: Session, user_id: uuid.UUID, title: str) -> Class:
     clazz = Class(user_id=user_id, title=title)
     db.add(clazz)
@@ -51,6 +58,17 @@ def get_latest_notes(
         .limit(1)
     )
     return db.execute(stmt).scalar_one_or_none()
+
+
+def list_notes(
+    *, db: Session, user_id: uuid.UUID, class_id: uuid.UUID
+) -> list[ClassNotes]:
+    stmt = (
+        select(ClassNotes)
+        .where(ClassNotes.class_id == class_id, ClassNotes.user_id == user_id)
+        .order_by(desc(ClassNotes.created_at))
+    )
+    return list(db.execute(stmt).scalars().all())
 
 
 def create_study_plan(

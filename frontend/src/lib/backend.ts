@@ -105,6 +105,19 @@ export type StudyPlanOut = {
   created_at: string;
 };
 
+export type PracticeQuestion = { q: string; a: string };
+
+export function generatePractice(classId: string, topic: string, count: number, difficulty: string) {
+  return backendFetch<{ questions: PracticeQuestion[] }>(`/classes/${classId}/practice`, {
+    method: 'POST',
+    body: JSON.stringify({ topic, count, difficulty }),
+  });
+}
+
+export function listClasses() {
+  return backendFetch<ClassOut[]>('/classes');
+}
+
 export function createClass(title: string) {
   return backendFetch<ClassOut>('/classes', {
     method: 'POST',
@@ -119,10 +132,29 @@ export function addNotes(classId: string, notes_text: string) {
   });
 }
 
+export function getClassNotes(classId: string) {
+  return backendFetch<NotesOut[]>(`/classes/${classId}/notes`);
+}
+
 export function createStudyPlan(classId: string, notesId?: string) {
   return backendFetch<StudyPlanOut>(`/classes/${classId}/study-plan`, {
     method: 'POST',
     body: JSON.stringify({ notes_id: notesId ?? null }),
+  });
+}
+
+export type SummariseOut = {
+  title: string;
+  summary: string;
+  key_topics: string[];
+  important_dates: string[];
+  extracted_notes: string;
+};
+
+export function summariseDocument(filename: string, raw_text: string) {
+  return backendFetch<SummariseOut>('/summarise', {
+    method: 'POST',
+    body: JSON.stringify({ filename, raw_text }),
   });
 }
 

@@ -14,7 +14,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install uv ruff black mypy && uv sync
+      - run: pip install -e ".[dev]"
       - run: ruff check . && black --check . && mypy .
 
   test:
@@ -24,7 +24,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -r requirements.txt
-      - run: pip install pytest pytest-asyncio pytest-mock pytest-cov
+      - run: |
+          pip install \
+            fastapi uvicorn pydantic httpx python-jose[cryptography] \
+            sqlalchemy google-generativeai \
+            pytest pytest-asyncio pytest-mock pytest-cov
+          pip install -e . --no-deps
       - run: pytest --cov=app --cov-fail-under=80
 
