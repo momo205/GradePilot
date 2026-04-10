@@ -39,14 +39,18 @@ export default function LeftSidebar() {
       </nav>
 
       {/* Sync Google Calendar Button */}
-      <button className="flex items-center justify-between w-full py-4 px-5 rounded-[1.25rem] bg-[#23283c] hover:bg-[#2b3047] border border-white/[0.03] transition-colors mb-7 shadow-sm group">
+      <button 
+        disabled
+        title="Coming soon"
+        className="flex items-center justify-between w-full py-4 px-5 rounded-[1.25rem] bg-[#23283c] border border-white/[0.03] mb-7 shadow-sm opacity-50 cursor-not-allowed"
+      >
         <div className="flex items-center gap-3.5">
           <svg className="w-[18px] h-[18px] text-[#36d3b7]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
           <span className="text-white font-extrabold text-[13px] tracking-wide">Sync Google Calendar</span>
         </div>
-        <svg className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors group-hover:rotate-180 duration-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
       </button>
