@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, BookOpen, AlertCircle } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, BookOpen, AlertCircle, X } from "lucide-react";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -27,6 +27,7 @@ const HOURS_OF_DAY = Array.from({ length: 13 }, (_, i) => i + 8); // 8 AM to 8 P
 export default function CalendarPage() {
   const [view, setView] = useState<ViewType>("month");
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedEvent, setSelectedEvent] = useState<typeof MOCK_EVENTS[0] | null>(null);
 
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
@@ -120,13 +121,17 @@ export default function CalendarPage() {
     const colorClass = colors[event.type as keyof typeof colors];
 
     return (
-      <div key={event.id} className={cn("flex flex-col gap-0.5 rounded-lg border p-1.5 backdrop-blur-md shadow-sm", colorClass)}>
+      <button 
+        key={event.id}
+        onClick={() => setSelectedEvent(event)}
+        className={cn("text-left cursor-pointer transition-transform hover:scale-[1.02] flex flex-col gap-0.5 rounded-lg border p-1.5 backdrop-blur-md shadow-sm w-full", colorClass)}
+      >
         <div className="flex items-center gap-1.5">
           <Icon className="w-3 h-3 shrink-0" />
           <span className="text-[10px] font-bold leading-none truncate">{event.title}</span>
         </div>
         {!compact && <span className="text-[9px] opacity-70 ml-4">{event.time}</span>}
-      </div>
+      </button>
     );
   };
 
@@ -317,6 +322,71 @@ export default function CalendarPage() {
         )}
 
       </motion.div>
+
+      {/* Event Details Side Panel */}
+      <AnimatePresence>
+        {selectedEvent && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedEvent(null)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+            />
+            <motion.div
+              initial={{ x: "100%", opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: "100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed right-0 top-0 bottom-0 w-[400px] bg-[#141B3A]/95 backdrop-blur-3xl border-l border-white/10 z-50 p-6 shadow-2xl flex flex-col"
+            >
+              <button 
+                onClick={() => setSelectedEvent(null)}
+                className="absolute top-6 right-6 p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+               >
+                 <X className="w-5 h-5" />
+              </button>
+              
+              <div className="mt-8 flex flex-col gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="px-2.5 py-1 rounded-full bg-[#7364d9]/20 text-[#a78bfa] text-[10px] font-bold uppercase tracking-wider border border-[#7364d9]/30">
+                      {selectedEvent.type}
+                    </span>
+                  </div>
+                  <h2 className="text-2xl font-extrabold text-white leading-tight">{selectedEvent.title}</h2>
+                </div>
+
+                <div className="space-y-4 bg-black/20 rounded-2xl p-5 border border-white/5">
+                  <div className="flex items-center gap-3 text-slate-300">
+                    <CalendarIcon className="w-5 h-5 text-[#36d3b7]" />
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Date</p>
+                      <p className="text-sm font-semibold">{selectedEvent.date.toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                    </div>
+                  </div>
+                  <div className="h-px bg-white/5 w-full" />
+                  <div className="flex items-center gap-3 text-slate-300">
+                    <Clock className="w-5 h-5 text-[#00F5D4]" />
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Time</p>
+                      <p className="text-sm font-semibold">{selectedEvent.time}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="pt-4">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-3">Description</p>
+                  <p className="text-sm text-slate-300 leading-relaxed">
+                    This is a mock event description. In a fully implemented system, this would contain study notes, assignment details, or specific exam topics linked from your syllabus summary.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
