@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, FileText, Sparkles, Upload, X } from 'lucide-react';
 
@@ -25,16 +25,34 @@ export default function MaterialsPage() {
   const [extracting, setExtracting] = useState(false);
   const [topics, setTopics] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const extractTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const classSelectId = useId();
 
   const selectedClass = MOCK_CLASSES.find((c) => c.id === selectedClassId);
 
+  useEffect(() => {
+    return () => {
+      if (extractTimeoutRef.current) clearTimeout(extractTimeoutRef.current);
+    };
+  }, []);
+
+  const cancelPendingExtract = () => {
+    if (extractTimeoutRef.current) {
+      clearTimeout(extractTimeoutRef.current);
+      extractTimeoutRef.current = null;
+    }
+    setExtracting(false);
+  };
+
   const addFiles = (incoming: File[]) => {
     if (incoming.length === 0) return;
+    cancelPendingExtract();
     setFiles((prev) => [...prev, ...incoming]);
     setTopics([]);
   };
 
   const removeFile = (index: number) => {
+    cancelPendingExtract();
     setFiles((prev) => prev.filter((_, i) => i !== index));
     setTopics([]);
   };
@@ -47,13 +65,18 @@ export default function MaterialsPage() {
 
   const extractTopics = () => {
     if (files.length === 0) return;
+    cancelPendingExtract();
     setExtracting(true);
     setTopics([]);
-    setTimeout(() => {
-      setTopics(MOCK_TOPICS_BY_CLASS[selectedClassId] ?? []);
+    const targetClassId = selectedClassId;
+    extractTimeoutRef.current = setTimeout(() => {
+      setTopics(MOCK_TOPICS_BY_CLASS[targetClassId] ?? []);
       setExtracting(false);
+      extractTimeoutRef.current = null;
     }, 900);
   };
+
+  const openFilePicker = () => fileInputRef.current?.click();
 
   return (
     <motion.div
@@ -72,13 +95,28 @@ export default function MaterialsPage() {
       </header>
 
       <div className="flex flex-col gap-4 flex-1 min-h-0">
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            addFiles(Array.from(e.target.files ?? []));
+            e.target.value = '';
+          }}
+        />
         <div className="bg-[#141B3A]/50 backdrop-blur-xl border border-white/5 rounded-[1.25rem] p-5 shadow-[0_10px_40px_rgba(0,0,0,0.3)]">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 flex items-center gap-2">
+          <label
+            htmlFor={classSelectId}
+            className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 flex items-center gap-2"
+          >
             <BookOpen className="w-3 h-3" /> Select Class
           </label>
           <select
+            id={classSelectId}
             value={selectedClassId}
             onChange={(e) => {
+              cancelPendingExtract();
               setSelectedClassId(e.target.value);
               setTopics([]);
             }}
@@ -90,27 +128,19 @@ export default function MaterialsPage() {
           </select>
         </div>
 
-        <div
+        <button
+          type="button"
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={onDrop}
-          onClick={() => fileInputRef.current?.click()}
-          className={`relative flex flex-col items-center justify-center gap-3 px-6 py-10 rounded-[1.25rem] border-2 border-dashed cursor-pointer transition-all text-center ${
+          onClick={openFilePicker}
+          aria-label="Upload course files"
+          className={`relative w-full flex flex-col items-center justify-center gap-3 px-6 py-10 rounded-[1.25rem] border-2 border-dashed cursor-pointer transition-all text-center focus:outline-none focus:ring-2 focus:ring-[#00F5D4]/60 ${
             isDragging
               ? 'border-[#00F5D4] bg-[#00F5D4]/10'
               : 'border-white/10 bg-[#141B3A]/30 hover:border-[#00F5D4]/40 hover:bg-[#00F5D4]/5'
           }`}
         >
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              addFiles(Array.from(e.target.files ?? []));
-              e.target.value = '';
-            }}
-          />
           <Upload className={`w-6 h-6 ${isDragging ? 'text-[#00F5D4]' : 'text-slate-500'}`} />
           <div>
             <p className={`text-sm font-bold ${isDragging ? 'text-[#00F5D4]' : 'text-white'}`}>
@@ -120,7 +150,7 @@ export default function MaterialsPage() {
               Syllabi, slides, PDFs &mdash; {selectedClass?.title}
             </p>
           </div>
-        </div>
+        </button>
 
         <AnimatePresence>
           {files.length > 0 && (
