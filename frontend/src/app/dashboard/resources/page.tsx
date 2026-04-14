@@ -3,20 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, ExternalLink, Layers, Sparkles } from 'lucide-react';
-
-const MOCK_CLASSES = [
-  { id: 'cs101', title: 'CS 101: Data Structures' },
-  { id: 'bio200', title: 'BIO 200: Genetics' },
-  { id: 'math220', title: 'MATH 220: Linear Algebra' },
-  { id: 'eng150', title: 'ENG 150: Rhetoric' },
-];
-
-const MOCK_TOPICS_BY_CLASS: Record<string, string[]> = {
-  cs101: ['Arrays & Linked Lists', 'Stacks & Queues', 'Hash Tables', 'Binary Trees', 'Graph Traversal'],
-  bio200: ['Mendelian Inheritance', 'DNA Replication', 'Gene Expression', 'Mutations', 'Population Genetics'],
-  math220: ['Vector Spaces', 'Matrix Operations', 'Determinants', 'Eigenvalues', 'Orthogonality'],
-  eng150: ['Thesis Construction', 'Ethos, Pathos, Logos', 'Counterargument', 'Citation Styles', 'Revision Strategy'],
-};
+import { MOCK_CLASSES, MOCK_TOPICS_BY_CLASS } from '@/lib/mockCourseData';
 
 type Resource = { title: string; url: string; source: string; description: string };
 
@@ -200,7 +187,7 @@ export default function ResourcesPage() {
               <ul className="flex flex-col gap-3">
                 {resources.map((r, i) => (
                   <motion.li
-                    key={r.url + i}
+                    key={r.url}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.06 }}
