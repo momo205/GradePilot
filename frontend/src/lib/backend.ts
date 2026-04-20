@@ -158,3 +158,13 @@ export function summariseDocument(filename: string, raw_text: string) {
   });
 }
 
+export type CalendarEventOut = {
+  id: string | number;
+  title: string;
+  start_datetime: string;
+  end_datetime: string;
+};
+
+export function getCalendarEvents() {
+  return backendFetch<CalendarEventOut[]>('/calendar/events');
+}

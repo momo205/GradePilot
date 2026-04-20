@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, BookOpen, AlertCircle, X } from "lucide-react";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { getCalendarEvents } from "@/lib/backend";
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
@@ -12,14 +13,13 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 
 type ViewType = "month" | "week";
 
-// Mock Events Data
-const MOCK_EVENTS = [
-  { id: 1, title: "Data Structures Midterm", date: new Date(new Date().getFullYear(), new Date().getMonth(), 15), type: "exam", time: "10:00 AM" },
-  { id: 2, title: "Study: Binary Trees", date: new Date(new Date().getFullYear(), new Date().getMonth(), 12), type: "study", time: "2:00 PM" },
-  { id: 3, title: "Assignment 3 Due", date: new Date(new Date().getFullYear(), new Date().getMonth(), 18), type: "assignment", time: "11:59 PM" },
-  { id: 4, title: "Study: Graph Algorithms", date: new Date(new Date().getFullYear(), new Date().getMonth(), 20), type: "study", time: "6:00 PM" },
-  { id: 5, title: "Review Notes", date: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()), type: "study", time: "4:00 PM" }, // Today
-];
+export interface CalendarEvent {
+  id: string | number;
+  title: string;
+  date: Date;
+  type: string;
+  time: string;
+}
 
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const HOURS_OF_DAY = Array.from({ length: 13 }, (_, i) => i + 8); // 8 AM to 8 PM
@@ -27,7 +27,29 @@ const HOURS_OF_DAY = Array.from({ length: 13 }, (_, i) => i + 8); // 8 AM to 8 P
 export default function CalendarPage() {
   const [view, setView] = useState<ViewType>("month");
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedEvent, setSelectedEvent] = useState<typeof MOCK_EVENTS[0] | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+
+  useEffect(() => {
+    getCalendarEvents()
+      .then((data) => {
+        const mapped = data.map((ev) => {
+          const startDate = new Date(ev.start_datetime);
+          const timeString = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          return {
+            id: ev.id,
+            title: ev.title,
+            date: startDate,
+            type: "study",
+            time: timeString
+          };
+        });
+        setEvents(mapped);
+      })
+      .catch((err) => {
+        console.error("Failed to load events", err);
+      });
+  }, []);
 
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
@@ -103,10 +125,10 @@ export default function CalendarPage() {
   const isToday = (d: Date) => isSameDay(d, new Date());
 
   const getEventsForDate = (date: Date) => {
-    return MOCK_EVENTS.filter(e => isSameDay(e.date, date));
+    return events.filter(e => isSameDay(e.date, date));
   };
 
-  const renderEventBadge = (event: typeof MOCK_EVENTS[0], compact = false) => {
+  const renderEventBadge = (event: CalendarEvent, compact = false) => {
     const colors = {
       exam: "bg-rose-500/20 text-rose-300 border-rose-500/30",
       assignment: "bg-amber-500/20 text-amber-300 border-amber-500/30",
