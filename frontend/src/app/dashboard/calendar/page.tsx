@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, BookOpen, AlertCircle, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, BookOpen, AlertCircle, X, RefreshCw } from "lucide-react";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { getCalendarEvents } from "@/lib/backend";
+import { getCalendarEvents, syncCalendarEvents } from "@/lib/backend";
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
@@ -29,6 +29,19 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSync = async () => {
+    try {
+      setIsSyncing(true);
+      await syncCalendarEvents();
+      // Optional: re-fetch events here if needed, keeping simple for now
+    } catch (err) {
+      console.error("Failed to sync calendar", err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   useEffect(() => {
     getCalendarEvents()
@@ -203,17 +216,21 @@ export default function CalendarPage() {
 
           {/* Navigation */}
           <div className="flex items-center gap-3">
-            {/* Disabled Sync / Refresh Buttons */}
+            {/* Sync / Refresh Buttons */}
             <div className="flex items-center gap-2 mr-2">
               <button 
-                disabled
-                title="Coming soon"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-500 bg-white/5 border border-white/5 rounded-lg opacity-50 cursor-not-allowed relative group"
+                onClick={handleSync}
+                disabled={isSyncing}
+                title="Sync with Google Calendar"
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all border",
+                  isSyncing 
+                    ? "text-slate-400 bg-white/10 border-white/10 cursor-not-allowed" 
+                    : "text-slate-300 bg-white/5 hover:bg-white/10 hover:text-white border-white/5 hover:border-white/10"
+                )}
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Sync to Google
+                <RefreshCw className={cn("w-3.5 h-3.5", isSyncing && "animate-spin")} />
+                {isSyncing ? "Syncing..." : "Sync to Google"}
               </button>
               <button 
                 disabled

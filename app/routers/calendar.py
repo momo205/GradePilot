@@ -50,3 +50,8 @@ MOCK_BACKEND_EVENTS = [
 @router.get("/events", response_model=list[EventOut])
 def get_events():
     return MOCK_BACKEND_EVENTS
+
+@router.post("/sync")
+def sync_events():
+    return {"status": "synced"}
+

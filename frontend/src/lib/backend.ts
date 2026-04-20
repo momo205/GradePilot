@@ -168,3 +168,9 @@ export type CalendarEventOut = {
 export function getCalendarEvents() {
   return backendFetch<CalendarEventOut[]>('/calendar/events');
 }
+
+export function syncCalendarEvents() {
+  return backendFetch<{ status: string }>('/calendar/sync', {
+    method: 'POST',
+  });
+}
