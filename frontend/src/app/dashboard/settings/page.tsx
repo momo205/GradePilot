@@ -3,12 +3,8 @@
 import { ReactNode, useId } from 'react';
 import { motion } from 'framer-motion';
 import { Bell, Calendar, CheckCircle2, Clock, Link2, Settings as SettingsIcon, XCircle } from 'lucide-react';
-import {
-  DEADLINE_OPTIONS,
-  DeadlineDays,
-  isDeadlineDays,
-  useSettings,
-} from '@/lib/useSettings';
+import { DEADLINE_OPTIONS, DeadlineDays, isDeadlineDays } from '@/lib/settingsTypes';
+import { useSettings } from '@/lib/useSettings';
 
 export default function SettingsPage() {
   const {
@@ -74,7 +70,7 @@ export default function SettingsPage() {
               icon={<Clock className="w-5 h-5 text-[#00F5D4]" />}
               iconBg="bg-[#00F5D4]/15 border-[#00F5D4]/25"
               title="Deadline reminder window"
-              description="How many days before a deadline you want to be alerted"
+              description="How many days before a deadline you'd like to be alerted"
               labelFor={deadlineSelectId}
             />
           </div>
