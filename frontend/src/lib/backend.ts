@@ -56,6 +56,7 @@ export async function backendFetch<T>(
   try {
     res = await fetch(`${BACKEND_URL}${path}`, {
       ...init,
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         ...(init?.headers ?? {}),
@@ -172,6 +173,8 @@ export type CalendarEventOut = {
   title: string;
   start_datetime: string;
   end_datetime: string;
+  description?: string | null;
+  type?: string | null;
 };
 
 export function getCalendarEvents() {

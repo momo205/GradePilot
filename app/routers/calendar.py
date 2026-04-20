@@ -1,13 +1,14 @@
 import os
 import uuid
 import json
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request as FastAPIRequest
-from fastapi.responses import RedirectResponse
+from datetime import datetime, timezone, timedelta
+from fastapi import APIRouter, Depends, HTTPException, Request as FastAPIRequest, Response
+from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 from pydantic import BaseModel
 
+from app.db import crud
 from app.deps.auth import CurrentUser, get_current_user
 from app.db.session import get_db
 from app.db.models import GoogleCalendarToken, GoogleEventSync
@@ -20,26 +21,52 @@ from googleapiclient.discovery import build
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
+# Store PKCE code verifiers in-memory linked to the state (user_id) for the OAuth flow
+oauth_verifiers: dict[str, str] = {}
+
 class EventOut(BaseModel):
     id: str | int
     title: str
     start_datetime: str
     end_datetime: str
+    description: str | None = None
+    type: str | None = "study"
 
-# Mock data
-now = datetime.now()
-MOCK_BACKEND_EVENTS = [
-    {
-        "id": 1,
-        "title": "Data Structures Midterm",
-        "start_datetime": datetime(now.year, now.month, 15, 10, 0).isoformat() + "Z",
-        "end_datetime": datetime(now.year, now.month, 15, 12, 0).isoformat() + "Z",
-    },
-]
+def get_user_events(db: Session, user_uuid: uuid.UUID) -> list[dict]:
+    plans = crud.list_study_plans(db=db, user_id=user_uuid)
+    events = []
+    
+    for plan in plans:
+        schedule = plan.plan_json.get("schedule", [])
+        start_date = plan.created_at
+        title_prefix = plan.plan_json.get("title", "Study Plan")
+        
+        for idx, day_plan in enumerate(schedule):
+            # Place study sessions at 10 AM on consecutive days
+            event_date = start_date + timedelta(days=idx)
+            event_start = event_date.replace(hour=10, minute=0, second=0, microsecond=0)
+            event_end = event_start + timedelta(hours=2)
+            
+            tasks_list = day_plan.get("tasks", [])
+            desc = "• " + "\n• ".join(tasks_list) if tasks_list else "Study block"
+            
+            events.append({
+                "id": f"{plan.id}_day_{idx}",
+                "title": f"{title_prefix}: {day_plan.get('day', f'Day {idx+1}')}",
+                "start_datetime": event_start.isoformat(),
+                "end_datetime": event_end.isoformat(),
+                "description": desc,
+                "type": "study"
+            })
+            
+    return events
 
 SCOPES = ['https://www.googleapis.com/auth/calendar.events']
 
 def get_flow(state: str = None):
+    # Allow local HTTP traffic for OAuth
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+    
     # Fallback to mock config if no env vars present
     client_config = {
         "web": {
@@ -62,8 +89,13 @@ def get_flow(state: str = None):
     return flow
 
 @router.get("/events", response_model=list[EventOut])
-def get_events():
-    return MOCK_BACKEND_EVENTS
+def get_events(user: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    try:
+        user_uuid = uuid.UUID(user.user_id)
+        return get_user_events(db, user_uuid)
+    except Exception as e:
+        print(f"Error getting events: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve events")
 
 @router.post("/sync")
 def sync_events(user: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -94,9 +126,12 @@ def sync_events(user: CurrentUser = Depends(get_current_user), db: Session = Dep
         # Build Google Calendar client, bypassing discovery cache issues if any
         service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
 
-        for app_event in MOCK_BACKEND_EVENTS:
+        real_events = get_user_events(db, user_uuid)
+
+        for app_event in real_events:
             body = {
                 "summary": app_event["title"],
+                "description": app_event["description"],
                 "start": {
                     "dateTime": app_event["start_datetime"],
                 },
@@ -154,13 +189,19 @@ def connect_calendar(user: CurrentUser = Depends(get_current_user)):
         include_granted_scopes='true',
         prompt='consent'
     )
-    return {"url": authorization_url}
+    
+    # Track the PKCE challenge securely in memory for the callback to use
+    oauth_verifiers[user.user_id] = flow.code_verifier
+    
+    return JSONResponse({"url": authorization_url})
 
 @router.get("/callback")
 def calendar_callback(request: FastAPIRequest, state: str, code: str, db: Session = Depends(get_db)):
     # Verify we got standard params
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing auth code or state")
+
+    google_code_verifier = oauth_verifiers.get(state)
 
     try:
         user_uuid = uuid.UUID(state)
@@ -178,8 +219,12 @@ def calendar_callback(request: FastAPIRequest, state: str, code: str, db: Sessio
             mock_refresh = "mock-refresh-token"
             expiry = None
         else:
-            # We'd fetch using real flow:
-            flow.fetch_token(authorization_response=str(request.url))
+            # We'd fetch using real flow. We force https scheme so oauthlib doesn't throw insecure_transport
+            auth_response = str(request.url).replace('http://', 'https://')
+            flow.fetch_token(
+                authorization_response=auth_response,
+                code_verifier=google_code_verifier
+            )
             creds = flow.credentials
             mock_access = creds.token
             mock_refresh = creds.refresh_token

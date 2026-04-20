@@ -19,6 +19,7 @@ export interface CalendarEvent {
   date: Date;
   type: string;
   time: string;
+  description: string;
 }
 
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -67,8 +68,9 @@ export default function CalendarPage() {
             id: ev.id,
             title: ev.title,
             date: startDate,
-            type: "study",
-            time: timeString
+            type: ev.type || "study",
+            time: timeString,
+            description: ev.description || "Study block",
           };
         });
         setEvents(mapped);
@@ -462,9 +464,9 @@ export default function CalendarPage() {
                 
                 <div className="pt-4">
                   <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-3">Description</p>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    This is a mock event description. In a fully implemented system, this would contain study notes, assignment details, or specific exam topics linked from your syllabus summary.
-                  </p>
+                  <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">
+                    {selectedEvent.description}
+                  </div>
                 </div>
               </div>
             </motion.div>

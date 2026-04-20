@@ -91,3 +91,14 @@ def create_study_plan(
     db.commit()
     db.refresh(plan)
     return plan
+
+
+def list_study_plans(
+    *, db: Session, user_id: uuid.UUID
+) -> list[StudyPlan]:
+    stmt = (
+        select(StudyPlan)
+        .where(StudyPlan.user_id == user_id)
+        .order_by(desc(StudyPlan.created_at))
+    )
+    return list(db.execute(stmt).scalars().all())
