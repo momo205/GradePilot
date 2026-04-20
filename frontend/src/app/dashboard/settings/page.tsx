@@ -92,7 +92,12 @@ export default function SettingsPage() {
           <select
             id={deadlineSelectId}
             value={daysBeforeDeadline}
-            onChange={(e) => setDaysBeforeDeadline(Number(e.target.value) as DeadlineDays)}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              if ((DEADLINE_OPTIONS as readonly number[]).includes(next)) {
+                setDaysBeforeDeadline(next as DeadlineDays);
+              }
+            }}
             disabled={!notificationsEnabled}
             className="w-full bg-[#0B0F2A] border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white focus:outline-none focus:border-[#00F5D4]/50 focus:ring-1 focus:ring-[#00F5D4]/50 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
