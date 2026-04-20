@@ -5,8 +5,22 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
+import { syncCalendarEvents } from "@/lib/backend";
 
 export default function LeftSidebar() {
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSync = async () => {
+    try {
+      setIsSyncing(true);
+      await syncCalendarEvents();
+    } catch (err) {
+      console.error("Failed to sync calendar", err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <aside className="h-full w-[300px] bg-[#141B3A]/60 backdrop-blur-xl border border-white/5 p-6 flex flex-col rounded-[24px] shadow-[0_10px_40px_rgba(0,0,0,0.4)] relative">
       {/* Brand Header */}
@@ -40,17 +54,18 @@ export default function LeftSidebar() {
 
       {/* Sync Google Calendar Button */}
       <button 
-        disabled
-        title="Coming soon"
-        className="flex items-center justify-between w-full py-4 px-5 rounded-[1.25rem] bg-[#23283c] border border-white/[0.03] mb-7 shadow-sm opacity-50 cursor-not-allowed"
+        onClick={handleSync}
+        disabled={isSyncing}
+        title="Sync Calendar Data"
+        className={`flex items-center justify-between w-full py-4 px-5 rounded-[1.25rem] bg-[#23283c] border border-white/[0.03] mb-7 shadow-sm transition-all ${isSyncing ? "opacity-50 cursor-not-allowed" : "hover:bg-[#2a3047] cursor-pointer"}`}
       >
         <div className="flex items-center gap-3.5">
           <svg className="w-[18px] h-[18px] text-[#36d3b7]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          <span className="text-white font-extrabold text-[13px] tracking-wide">Sync Google Calendar</span>
+          <span className="text-white font-extrabold text-[13px] tracking-wide">{isSyncing ? "Syncing..." : "Sync Google Calendar"}</span>
         </div>
-        <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className={`w-4 h-4 text-slate-400 ${isSyncing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
       </button>
