@@ -1,16 +1,23 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { ReactNode, useId } from 'react';
 import { motion } from 'framer-motion';
 import { Bell, Calendar, CheckCircle2, Clock, Link2, Settings as SettingsIcon, XCircle } from 'lucide-react';
-
-const DEADLINE_OPTIONS = [1, 2, 3, 5, 7, 14] as const;
-type DeadlineDays = (typeof DEADLINE_OPTIONS)[number];
+import {
+  DEADLINE_OPTIONS,
+  DeadlineDays,
+  isDeadlineDays,
+  useSettings,
+} from '@/lib/useSettings';
 
 export default function SettingsPage() {
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [daysBeforeDeadline, setDaysBeforeDeadline] = useState<DeadlineDays>(3);
-  const [googleConnected, setGoogleConnected] = useState(false);
+  const {
+    settings,
+    setNotificationsEnabled,
+    setDaysBeforeDeadline,
+    setGoogleConnected,
+  } = useSettings();
+  const { notificationsEnabled, daysBeforeDeadline, googleConnected } = settings;
 
   const notifySwitchId = useId();
   const deadlineSelectId = useId();
@@ -33,31 +40,21 @@ export default function SettingsPage() {
       </header>
 
       <div className="flex flex-col gap-4">
-        {/* Notification toggle card */}
-        <section className="bg-[#141B3A]/50 backdrop-blur-xl border border-white/5 rounded-[1.25rem] p-5 shadow-[0_10px_40px_rgba(0,0,0,0.3)]">
+        <SettingsCard>
           <div className="flex items-center justify-between gap-4">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-[#6D4AFF]/15 border border-[#6D4AFF]/25 flex items-center justify-center shrink-0">
-                <Bell className="w-5 h-5 text-[#6D4AFF]" />
-              </div>
-              <div className="min-w-0">
-                <label
-                  htmlFor={notifySwitchId}
-                  className="text-sm font-bold text-white block cursor-pointer"
-                >
-                  Notifications
-                </label>
-                <p className="text-[12px] text-slate-400 mt-0.5">
-                  Receive reminders for upcoming deadlines and study sessions
-                </p>
-              </div>
-            </div>
+            <SettingRow
+              icon={<Bell className="w-5 h-5 text-[#6D4AFF]" />}
+              iconBg="bg-[#6D4AFF]/15 border-[#6D4AFF]/25"
+              title="Notifications"
+              description="Receive reminders for upcoming deadlines and study sessions"
+              labelFor={notifySwitchId}
+            />
             <button
               id={notifySwitchId}
               type="button"
               role="switch"
               aria-checked={notificationsEnabled}
-              onClick={() => setNotificationsEnabled((v) => !v)}
+              onClick={() => setNotificationsEnabled(!notificationsEnabled)}
               className={`relative shrink-0 inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#00F5D4]/60 ${
                 notificationsEnabled ? 'bg-[#00F5D4]' : 'bg-white/10'
               }`}
@@ -69,34 +66,24 @@ export default function SettingsPage() {
               />
             </button>
           </div>
-        </section>
+        </SettingsCard>
 
-        {/* Days before deadline dropdown */}
-        <section className="bg-[#141B3A]/50 backdrop-blur-xl border border-white/5 rounded-[1.25rem] p-5 shadow-[0_10px_40px_rgba(0,0,0,0.3)]">
-          <div className="flex items-start gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-[#00F5D4]/15 border border-[#00F5D4]/25 flex items-center justify-center shrink-0">
-              <Clock className="w-5 h-5 text-[#00F5D4]" />
-            </div>
-            <div className="min-w-0">
-              <label
-                htmlFor={deadlineSelectId}
-                className="text-sm font-bold text-white block"
-              >
-                Deadline reminder window
-              </label>
-              <p className="text-[12px] text-slate-400 mt-0.5">
-                How many days before a deadline you want to be alerted
-              </p>
-            </div>
+        <SettingsCard>
+          <div className="mb-4">
+            <SettingRow
+              icon={<Clock className="w-5 h-5 text-[#00F5D4]" />}
+              iconBg="bg-[#00F5D4]/15 border-[#00F5D4]/25"
+              title="Deadline reminder window"
+              description="How many days before a deadline you want to be alerted"
+              labelFor={deadlineSelectId}
+            />
           </div>
           <select
             id={deadlineSelectId}
             value={daysBeforeDeadline}
             onChange={(e) => {
               const next = Number(e.target.value);
-              if ((DEADLINE_OPTIONS as readonly number[]).includes(next)) {
-                setDaysBeforeDeadline(next as DeadlineDays);
-              }
+              if (isDeadlineDays(next)) setDaysBeforeDeadline(next);
             }}
             disabled={!notificationsEnabled}
             className="w-full bg-[#0B0F2A] border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white focus:outline-none focus:border-[#00F5D4]/50 focus:ring-1 focus:ring-[#00F5D4]/50 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
@@ -107,10 +94,9 @@ export default function SettingsPage() {
               </option>
             ))}
           </select>
-        </section>
+        </SettingsCard>
 
-        {/* Google connection status card (mock) */}
-        <section className="bg-[#141B3A]/50 backdrop-blur-xl border border-white/5 rounded-[1.25rem] p-5 shadow-[0_10px_40px_rgba(0,0,0,0.3)]">
+        <SettingsCard>
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-start gap-3 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
@@ -121,28 +107,12 @@ export default function SettingsPage() {
                 <p className="text-[12px] text-slate-400 mt-0.5">
                   Sync deadlines and study blocks with your Google Calendar
                 </p>
-                <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest"
-                  style={{
-                    background: googleConnected ? 'rgba(0,245,212,0.10)' : 'rgba(255,77,109,0.10)',
-                    color: googleConnected ? '#00F5D4' : '#FF4D6D',
-                    border: `1px solid ${googleConnected ? 'rgba(0,245,212,0.30)' : 'rgba(255,77,109,0.30)'}`,
-                  }}
-                >
-                  {googleConnected ? (
-                    <>
-                      <CheckCircle2 className="w-3 h-3" /> Connected
-                    </>
-                  ) : (
-                    <>
-                      <XCircle className="w-3 h-3" /> Not connected
-                    </>
-                  )}
-                </div>
+                <ConnectionBadge connected={googleConnected} />
               </div>
             </div>
             <button
               type="button"
-              onClick={() => setGoogleConnected((v) => !v)}
+              onClick={() => setGoogleConnected(!googleConnected)}
               className={`shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-bold transition-all focus:outline-none focus:ring-2 focus:ring-[#00F5D4]/60 ${
                 googleConnected
                   ? 'bg-white/5 border border-white/10 text-white hover:bg-white/10'
@@ -153,35 +123,100 @@ export default function SettingsPage() {
               {googleConnected ? 'Disconnect' : 'Connect Google'}
             </button>
           </div>
-        </section>
+        </SettingsCard>
 
-        {/* Current settings summary */}
-        <section className="bg-[#141B3A]/50 backdrop-blur-xl border border-[#00F5D4]/20 rounded-[1.25rem] p-5 shadow-[0_10px_40px_rgba(0,0,0,0.3)]">
+        <SettingsCard accent>
           <p className="text-[10px] font-bold uppercase tracking-widest text-[#00F5D4] mb-3">
             Current settings
           </p>
           <ul className="flex flex-col gap-2 text-[13px]">
-            <li className="flex items-center justify-between">
-              <span className="text-slate-400">Notifications</span>
-              <span className="text-white font-semibold">{notificationsEnabled ? 'On' : 'Off'}</span>
-            </li>
-            <li className="flex items-center justify-between">
-              <span className="text-slate-400">Reminder window</span>
-              <span className="text-white font-semibold">
-                {notificationsEnabled
+            <SummaryRow label="Notifications" value={notificationsEnabled ? 'On' : 'Off'} />
+            <SummaryRow
+              label="Reminder window"
+              value={
+                notificationsEnabled
                   ? `${daysBeforeDeadline} ${daysBeforeDeadline === 1 ? 'day' : 'days'} before deadline`
-                  : '—'}
-              </span>
-            </li>
-            <li className="flex items-center justify-between">
-              <span className="text-slate-400">Google Calendar</span>
-              <span className="text-white font-semibold">
-                {googleConnected ? 'Connected' : 'Not connected'}
-              </span>
-            </li>
+                  : '—'
+              }
+            />
+            <SummaryRow label="Google Calendar" value={googleConnected ? 'Connected' : 'Not connected'} />
           </ul>
-        </section>
+        </SettingsCard>
       </div>
     </motion.div>
   );
 }
+
+function SettingsCard({ children, accent }: { children: ReactNode; accent?: boolean }) {
+  return (
+    <section
+      className={`bg-[#141B3A]/50 backdrop-blur-xl border rounded-[1.25rem] p-5 shadow-[0_10px_40px_rgba(0,0,0,0.3)] ${
+        accent ? 'border-[#00F5D4]/20' : 'border-white/5'
+      }`}
+    >
+      {children}
+    </section>
+  );
+}
+
+function SettingRow({
+  icon,
+  iconBg,
+  title,
+  description,
+  labelFor,
+}: {
+  icon: ReactNode;
+  iconBg: string;
+  title: string;
+  description: string;
+  labelFor: string;
+}) {
+  return (
+    <div className="flex items-start gap-3 min-w-0">
+      <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${iconBg}`}>
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <label htmlFor={labelFor} className="text-sm font-bold text-white block cursor-pointer">
+          {title}
+        </label>
+        <p className="text-[12px] text-slate-400 mt-0.5">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+function ConnectionBadge({ connected }: { connected: boolean }) {
+  return (
+    <div
+      className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest"
+      style={{
+        background: connected ? 'rgba(0,245,212,0.10)' : 'rgba(255,77,109,0.10)',
+        color: connected ? '#00F5D4' : '#FF4D6D',
+        border: `1px solid ${connected ? 'rgba(0,245,212,0.30)' : 'rgba(255,77,109,0.30)'}`,
+      }}
+    >
+      {connected ? (
+        <>
+          <CheckCircle2 className="w-3 h-3" /> Connected
+        </>
+      ) : (
+        <>
+          <XCircle className="w-3 h-3" /> Not connected
+        </>
+      )}
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <li className="flex items-center justify-between">
+      <span className="text-slate-400">{label}</span>
+      <span className="text-white font-semibold">{value}</span>
+    </li>
+  );
+}
+
+export type { DeadlineDays };
