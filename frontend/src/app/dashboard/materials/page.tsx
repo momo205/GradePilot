@@ -3,20 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, FileText, Sparkles, Upload, X } from 'lucide-react';
-
-const MOCK_CLASSES = [
-  { id: 'cs101', title: 'CS 101: Data Structures' },
-  { id: 'bio200', title: 'BIO 200: Genetics' },
-  { id: 'math220', title: 'MATH 220: Linear Algebra' },
-  { id: 'eng150', title: 'ENG 150: Rhetoric' },
-];
-
-const MOCK_TOPICS_BY_CLASS: Record<string, string[]> = {
-  cs101: ['Arrays & Linked Lists', 'Stacks & Queues', 'Hash Tables', 'Binary Trees', 'Graph Traversal'],
-  bio200: ['Mendelian Inheritance', 'DNA Replication', 'Gene Expression', 'Mutations', 'Population Genetics'],
-  math220: ['Vector Spaces', 'Matrix Operations', 'Determinants', 'Eigenvalues', 'Orthogonality'],
-  eng150: ['Thesis Construction', 'Ethos, Pathos, Logos', 'Counterargument', 'Citation Styles', 'Revision Strategy'],
-};
+import { MOCK_CLASSES, MOCK_TOPICS_BY_CLASS } from '@/lib/mockCourseData';
 
 export default function MaterialsPage() {
   const [selectedClassId, setSelectedClassId] = useState<string>(MOCK_CLASSES[0].id);
