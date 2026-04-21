@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, cast
 
 import google.generativeai as genai
+from google.api_core.exceptions import ResourceExhausted
 from pydantic import ValidationError
 
 from app.core.config import get_settings
@@ -15,6 +17,25 @@ logger = logging.getLogger("gradepilot.ai")
 
 class StudyPlanGenerationError(RuntimeError):
     pass
+
+
+class StudyPlanRateLimitError(StudyPlanGenerationError):
+    def __init__(self, message: str, *, retry_after_seconds: int | None = None):
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+_RETRY_RE = re.compile(r"Please retry in\s+([0-9]+(?:\.[0-9]+)?)s", re.IGNORECASE)
+
+
+def _parse_retry_after_seconds(msg: str) -> int | None:
+    m = _RETRY_RE.search(msg or "")
+    if not m:
+        return None
+    try:
+        return max(1, int(float(m.group(1)) + 0.999))
+    except Exception:
+        return None
 
 
 def _build_prompt(*, class_title: str, notes_text: str) -> str:
@@ -78,6 +99,18 @@ def generate_study_plan(
         )
         raise StudyPlanGenerationError(
             "Model did not return valid study-plan JSON"
+        ) from e
+    except ResourceExhausted as e:
+        retry_after = _parse_retry_after_seconds(str(e))
+        logger.info("study_plan_rate_limited retry_after=%s", retry_after)
+        if retry_after is not None:
+            raise StudyPlanRateLimitError(
+                f"Rate limited by Gemini API. Please retry in {retry_after}s.",
+                retry_after_seconds=retry_after,
+            ) from e
+        raise StudyPlanRateLimitError(
+            "Rate limited by Gemini API. Please retry shortly.",
+            retry_after_seconds=None,
         ) from e
     except Exception as e:  # noqa: BLE001
         logger.exception("study_plan_generation_failed err=%s", e.__class__.__name__)

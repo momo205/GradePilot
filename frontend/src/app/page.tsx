@@ -1,236 +1,229 @@
-'use client';
-
-import { motion } from 'framer-motion';
-import { Bot, Calendar, FileUp, Sparkles, ArrowRight, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
-
-const FEATURES = [
-  {
-    icon: <FileUp className="w-6 h-6" />,
-    title: 'Smart Document Parsing',
-    description: 'Upload syllabi, assignments, and notes. GradePilot extracts every deadline and task automatically.',
-    color: 'text-[#00F5D4]',
-    glow: 'shadow-[#00F5D4]/10',
-    border: 'hover:border-[#00F5D4]/30',
-  },
-  {
-    icon: <Sparkles className="w-6 h-6" />,
-    title: 'AI-Generated Study Plans',
-    description: 'A LangGraph agent prioritises your workload and builds a personalised, adaptive schedule around your life.',
-    color: 'text-[#6D4AFF]',
-    glow: 'shadow-[#6D4AFF]/10',
-    border: 'hover:border-[#6D4AFF]/30',
-  },
-  {
-    icon: <Calendar className="w-6 h-6" />,
-    title: 'Google Calendar Sync',
-    description: 'Study blocks are pushed directly to your calendar and automatically rescheduled when plans change.',
-    color: 'text-[#00F5D4]',
-    glow: 'shadow-[#00F5D4]/10',
-    border: 'hover:border-[#00F5D4]/30',
-  },
-];
-
-const SOCIAL_PROOF = [
-  'Extracts deadlines from any PDF',
-  'Adapts when you fall behind',
-  'Syncs with Google Calendar',
-  'Generates practice questions',
-];
 
 export default function LandingPage() {
   return (
     <div
-      className="relative min-h-screen w-full text-[#F8FAFC] font-sans overflow-x-hidden"
-      style={{ background: 'radial-gradient(ellipse at 50% 0%, #1a1f4a 0%, #0B0F2A 60%)' }}
+      className={[
+        'gp-page relative overflow-hidden',
+        // subtle dot grid
+        '[background-image:radial-gradient(rgba(255,255,255,0.06)_1px,transparent_1px)]',
+        '[background-size:22px_22px]',
+      ].join(' ')}
     >
-      {/* Background blobs */}
-      <div className="pointer-events-none fixed top-[-10%] left-[-5%] w-[50%] h-[50%] bg-[#6D4AFF]/10 rounded-full blur-[140px]" />
-      <div className="pointer-events-none fixed bottom-[-10%] right-[-5%] w-[50%] h-[50%] bg-[#00F5D4]/6 rounded-full blur-[160px]" />
+      {/* subtle blue glow */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 opacity-80 [background-image:radial-gradient(800px_420px_at_50%_140px,rgba(59,130,246,0.14),transparent_70%)]"
+      />
 
-      {/* ── Navbar ── */}
-      <nav className="relative z-20 flex items-center justify-between px-6 md:px-16 py-5 border-b border-white/5 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
-          <div
-            className="flex items-center justify-center w-9 h-9 rounded-xl shadow-lg shadow-[#00F5D4]/20"
-            style={{ background: 'linear-gradient(135deg, #6D4AFF, #00F5D4)' }}
-          >
-            <Bot className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-lg font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-[#94A3B8]">
+      {/* top nav */}
+      <div className="sticky top-0 z-50 border-b border-[#1e1e1e] bg-background/70 backdrop-blur">
+        <nav className="gp-container flex h-16 items-center justify-between gap-6">
+          <Link href="/" className="text-sm font-medium tracking-tight text-text">
             GradePilot
-          </span>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <Link
-            href="/dashboard"
-            className="text-sm text-[#94A3B8] hover:text-white transition-colors hidden sm:block"
-          >
-            Dashboard
           </Link>
-          <Link
-            href="/auth"
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-[#0B0F2A] transition-all hover:scale-105 active:scale-95"
-            style={{ background: 'linear-gradient(135deg, #6D4AFF, #00F5D4)' }}
-          >
-            Get Started <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-      </nav>
 
-      {/* ── Hero ── */}
-      <section className="relative z-10 flex flex-col items-center text-center px-6 pt-24 pb-20 md:pt-36 md:pb-28">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#00F5D4]/20 bg-[#00F5D4]/5 text-[#00F5D4] text-xs font-semibold mb-8 tracking-wide"
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          Powered by Gemini 1.5 Pro + LangGraph
-        </motion.div>
-
-        <motion.h1
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.1 }}
-          className="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.08] max-w-4xl"
-        >
-          Your autonomous{' '}
-          <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #6D4AFF, #00F5D4)' }}>
-            academic co-pilot
-          </span>
-        </motion.h1>
-
-        <motion.p
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.2 }}
-          className="mt-6 text-lg md:text-xl text-[#94A3B8] max-w-2xl leading-relaxed"
-        >
-          Upload your course materials and let GradePilot extract every deadline, build a personalised study plan, and keep your Google Calendar in sync — automatically.
-        </motion.p>
-
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.3 }}
-          className="mt-10 flex flex-col sm:flex-row items-center gap-4"
-        >
-          <Link
-            href="/auth"
-            className="flex items-center gap-2 px-7 py-3.5 rounded-2xl text-base font-bold text-[#0B0F2A] shadow-[0_4px_30px_rgba(109,74,255,0.35)] hover:shadow-[0_4px_40px_rgba(0,245,212,0.4)] transition-all hover:scale-105 active:scale-95"
-            style={{ background: 'linear-gradient(135deg, #6D4AFF, #00F5D4)' }}
-          >
-            Start Planning Free <ArrowRight className="w-5 h-5" />
-          </Link>
-          <Link
-            href="/auth"
-            className="px-7 py-3.5 rounded-2xl text-base font-semibold text-[#94A3B8] border border-white/10 hover:border-white/20 hover:text-white transition-all"
-          >
-            Sign In
-          </Link>
-        </motion.div>
-
-        {/* Social proof pills */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.5 }}
-          className="mt-12 flex flex-wrap justify-center gap-3"
-        >
-          {SOCIAL_PROOF.map((item) => (
-            <span
-              key={item}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/8 text-xs text-[#94A3B8]"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 text-[#00F5D4]" />
-              {item}
-            </span>
-          ))}
-        </motion.div>
-      </section>
-
-      {/* ── Features ── */}
-      <section className="relative z-10 px-6 md:px-16 pb-28 max-w-6xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-14"
-        >
-          <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white mb-3">
-            Everything handled by the agent
-          </h2>
-          <p className="text-[#94A3B8] text-base max-w-xl mx-auto">
-            GradePilot runs autonomously in the background so you can focus on actually learning.
-          </p>
-        </motion.div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {FEATURES.map((f, i) => (
-            <motion.div
-              key={f.title}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: i * 0.1 }}
-              whileHover={{ y: -6, transition: { duration: 0.2 } }}
-              className={`flex flex-col p-7 rounded-3xl bg-[#141B3A]/60 border border-white/5 backdrop-blur-md shadow-xl ${f.glow} ${f.border} transition-all duration-300`}
-            >
-              <div className={`w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center mb-5 ${f.color}`}>
-                {f.icon}
-              </div>
-              <h3 className="text-lg font-bold text-white mb-2">{f.title}</h3>
-              <p className="text-sm text-[#94A3B8] leading-relaxed">{f.description}</p>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── CTA Banner ── */}
-      <section className="relative z-10 px-6 md:px-16 pb-28 max-w-4xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.97 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="relative flex flex-col items-center text-center p-12 rounded-3xl border border-white/5 overflow-hidden"
-          style={{ background: 'linear-gradient(135deg, rgba(109,74,255,0.15), rgba(0,245,212,0.08))' }}
-        >
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#6D4AFF]/10 to-[#00F5D4]/5" />
-          <Bot className="w-12 h-12 text-[#00F5D4] mb-5 drop-shadow-[0_0_20px_rgba(0,245,212,0.5)]" />
-          <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white mb-3">
-            Ready to stop stressing about deadlines?
-          </h2>
-          <p className="text-[#94A3B8] text-base mb-8 max-w-lg">
-            Join students who let GradePilot handle the planning while they focus on learning.
-          </p>
-          <Link
-            href="/auth"
-            className="flex items-center gap-2 px-8 py-4 rounded-2xl text-base font-bold text-[#0B0F2A] shadow-[0_4px_30px_rgba(0,245,212,0.3)] hover:shadow-[0_4px_40px_rgba(0,245,212,0.5)] transition-all hover:scale-105 active:scale-95"
-            style={{ background: 'linear-gradient(135deg, #6D4AFF, #00F5D4)' }}
-          >
-            Launch GradePilot <ArrowRight className="w-5 h-5" />
-          </Link>
-        </motion.div>
-      </section>
-
-      {/* ── Footer ── */}
-      <footer className="relative z-10 border-t border-white/5 px-6 md:px-16 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#94A3B8]">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-6 h-6 rounded-lg flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #6D4AFF, #00F5D4)' }}
-          >
-            <Bot className="w-3.5 h-3.5 text-white" />
+          <div className="hidden md:flex items-center gap-6">
+            <a className="text-sm text-muted hover:text-text transition-colors" href="#features">
+              Features
+            </a>
+            <a className="text-sm text-muted hover:text-text transition-colors" href="#how">
+              How it Works
+            </a>
+            <a className="text-sm text-muted hover:text-text transition-colors" href="#pricing">
+              Pricing
+            </a>
           </div>
-          <span className="font-semibold text-white">GradePilot</span>
-          <span>— Autonomous Academic Planning Agent</span>
+
+          <div className="flex items-center gap-2">
+            <Link href="/auth" className="gp-btn-ghost">
+              Sign In
+            </Link>
+            <Link href="/auth" className="gp-btn">
+              Get Started
+            </Link>
+          </div>
+        </nav>
+      </div>
+
+      {/* hero */}
+      <header className="gp-container pt-16 md:pt-24 pb-14 md:pb-20">
+        <div className="mx-auto max-w-2xl text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-[11px] font-medium tracking-[0.18em] text-muted">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+            AI-POWERED ACADEMIC PLANNING
+          </div>
+
+          <h1 className="mt-6 text-4xl md:text-5xl font-semibold tracking-tight text-text">
+            Your semester, on autopilot.
+          </h1>
+
+          <p className="mt-4 text-base md:text-lg text-muted">
+            GradePilot turns syllabi and notes into deadlines, practice questions, and a focused game plan.
+          </p>
+
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link href="/auth" className="gp-btn px-5 py-2.5">
+              Get Started <span aria-hidden="true">→</span>
+            </Link>
+            <a href="#how" className="gp-btn-ghost px-5 py-2.5">
+              See How It Works
+            </a>
+          </div>
+
+          <div className="mt-8 flex items-center justify-center gap-2 text-sm text-muted">
+            <span className="text-accent" aria-hidden="true">
+              ★★★★★
+            </span>
+            <span>Built for students who want clarity, not chaos.</span>
+          </div>
         </div>
-        <span>© {new Date().getFullYear()} GradePilot. All rights reserved.</span>
+      </header>
+
+      {/* features */}
+      <section id="features" className="gp-container pb-16 md:pb-24">
+        <div className="mx-auto max-w-4xl">
+          <div className="flex items-end justify-between gap-6">
+            <div>
+              <h2 className="text-xl md:text-2xl font-semibold tracking-tight text-text">
+                Everything you need to run your week.
+              </h2>
+              <p className="mt-2 text-sm md:text-base text-muted">
+                A single workspace for classes, notes, deadlines, and practice—designed to feel calm.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              {
+                icon: '📄',
+                title: 'Syllabus Parsing',
+                desc: 'Upload your syllabus, we extract every deadline automatically.',
+              },
+              {
+                icon: '🧠',
+                title: 'Practice Questions',
+                desc: 'Generate quizzes from your notes in one click.',
+              },
+              {
+                icon: '📅',
+                title: 'Smart Deadlines',
+                desc: 'Set and track due dates across all your classes.',
+              },
+              {
+                icon: '📂',
+                title: 'Class Workspace',
+                desc: 'All your notes and materials, organized by course.',
+              },
+            ].map((f) => (
+              <div key={f.title} className="gp-card p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-xl">{f.icon}</div>
+                  <div
+                    aria-hidden="true"
+                    className="h-8 w-8 rounded-lg border border-border bg-background/40"
+                  />
+                </div>
+                <div className="mt-4 text-sm font-semibold text-text">{f.title}</div>
+                <div className="mt-2 text-sm text-muted leading-relaxed">{f.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* how it works */}
+      <section id="how" className="gp-container pb-16 md:pb-24">
+        <div className="mx-auto max-w-4xl gp-card p-6 md:p-8">
+          <div className="flex items-start justify-between gap-6 flex-col md:flex-row">
+            <div>
+              <h2 className="text-xl md:text-2xl font-semibold tracking-tight text-text">
+                How it works
+              </h2>
+              <p className="mt-2 text-sm md:text-base text-muted">
+                A simple flow that keeps you moving from upload to execution.
+              </p>
+            </div>
+            <a href="/auth" className="gp-btn-ghost">
+              Try it now
+            </a>
+          </div>
+
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { n: '1', title: 'Upload your syllabus or notes' },
+              { n: '2', title: 'GradePilot plans your semester' },
+              { n: '3', title: 'Study smarter, not harder' },
+            ].map((s, idx) => (
+              <div key={s.n} className="relative gp-card p-4 bg-background/40">
+                {idx < 2 ? (
+                  <div
+                    aria-hidden="true"
+                    className="hidden md:block absolute top-1/2 -right-2 w-4 h-px bg-border"
+                  />
+                ) : null}
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-accent/15 border border-accent/30 flex items-center justify-center text-sm font-semibold text-text">
+                    {s.n}
+                  </div>
+                  <div className="text-sm font-semibold text-text">{s.title}</div>
+                </div>
+                <div className="mt-3 text-sm text-muted">
+                  {s.n === '1'
+                    ? 'Drop in a file or paste text—GradePilot handles the structure.'
+                    : s.n === '2'
+                      ? 'Deadlines, topics, and study blocks—organized into a plan you can follow.'
+                      : 'Generate practice, track due dates, and stay ahead with less stress.'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* pricing (placeholder section for complete nav) */}
+      <section id="pricing" className="gp-container pb-16 md:pb-24">
+        <div className="mx-auto max-w-4xl">
+          <div className="gp-card p-6 md:p-8">
+            <h2 className="text-xl md:text-2xl font-semibold tracking-tight text-text">Pricing</h2>
+            <p className="mt-2 text-sm md:text-base text-muted">
+              Simple, student-friendly pricing. Coming soon.
+            </p>
+            <div className="mt-6 flex items-center gap-3">
+              <Link href="/auth" className="gp-btn">
+                Get Started
+              </Link>
+              <a href="#features" className="gp-btn-ghost">
+                Explore Features
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* footer */}
+      <footer className="border-t border-border">
+        <div className="gp-container py-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div>
+            <div className="text-sm font-medium tracking-tight text-text">GradePilot</div>
+            <div className="mt-2 text-xs text-muted">
+              © {new Date().getFullYear()} GradePilot. All rights reserved.
+            </div>
+          </div>
+
+          <div className="flex items-center gap-5">
+            <a className="text-sm text-muted hover:text-text transition-colors" href="#">
+              Privacy
+            </a>
+            <a className="text-sm text-muted hover:text-text transition-colors" href="#">
+              Terms
+            </a>
+            <a className="text-sm text-muted hover:text-text transition-colors" href="#">
+              Contact
+            </a>
+          </div>
+        </div>
       </footer>
     </div>
   );

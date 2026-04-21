@@ -30,6 +30,7 @@ class Settings:
     database_url: str
     google_api_key: str | None
     google_model: str
+    google_embedding_model: str
 
 
 def get_settings() -> Settings:
@@ -54,4 +55,9 @@ def get_settings() -> Settings:
         database_url=database_url,
         google_api_key=os.getenv("GOOGLE_API_KEY"),
         google_model=os.getenv("GOOGLE_MODEL", "gemini-2.5-flash"),
+        # Must support embedContent on the Gemini API (see google.generativeai.embed_content).
+        # text-embedding-004 is not valid for this SDK; embedding-001 is 768-dim and matches Vector(768).
+        google_embedding_model=os.getenv(
+            "GOOGLE_EMBEDDING_MODEL", "models/embedding-001"
+        ),
     )

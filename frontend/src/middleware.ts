@@ -23,19 +23,26 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Redirect unauthenticated users away from /dashboard
-  if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
+  const path = request.nextUrl.pathname;
+
+  // Remove dashboard flow entirely: /dashboard* always funnels into Study Plan (or auth).
+  if (path.startsWith('/dashboard')) {
+    return NextResponse.redirect(new URL(user ? '/study-plan' : '/auth', request.url));
+  }
+
+  // Protect the core workspace.
+  if (!user && path.startsWith('/study-plan')) {
     return NextResponse.redirect(new URL('/auth', request.url));
   }
 
-  // Redirect authenticated users away from /auth
-  if (user && request.nextUrl.pathname.startsWith('/auth')) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+  // Redirect authenticated users away from /auth.
+  if (user && path.startsWith('/auth')) {
+    return NextResponse.redirect(new URL('/study-plan', request.url));
   }
 
   return supabaseResponse;
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/auth'],
+  matcher: ['/dashboard/:path*', '/study-plan/:path*', '/auth'],
 };

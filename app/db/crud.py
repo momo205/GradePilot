@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Class, ClassNotes, StudyPlan
+from app.db.models import Class, ClassNotes, Deadline, Document, DocumentChunk, StudyPlan
 
 
 def list_classes(*, db: Session, user_id: uuid.UUID) -> list[Class]:
@@ -91,3 +91,92 @@ def create_study_plan(
     db.commit()
     db.refresh(plan)
     return plan
+
+
+def list_deadlines(
+    *, db: Session, user_id: uuid.UUID, class_id: uuid.UUID
+) -> list[Deadline]:
+    stmt = (
+        select(Deadline)
+        .where(Deadline.class_id == class_id, Deadline.user_id == user_id)
+        .order_by(desc(Deadline.created_at))
+    )
+    return list(db.execute(stmt).scalars().all())
+
+
+def create_deadline(
+    *,
+    db: Session,
+    user_id: uuid.UUID,
+    class_id: uuid.UUID,
+    title: str,
+    due_text: str,
+    due_at: Any | None = None,
+) -> Deadline:
+    deadline = Deadline(
+        user_id=user_id,
+        class_id=class_id,
+        title=title,
+        due_text=due_text,
+        due_at=due_at,
+    )
+    db.add(deadline)
+    db.commit()
+    db.refresh(deadline)
+    return deadline
+
+
+def delete_deadline(
+    *,
+    db: Session,
+    user_id: uuid.UUID,
+    class_id: uuid.UUID,
+    deadline_id: uuid.UUID,
+) -> bool:
+    stmt = select(Deadline).where(
+        Deadline.id == deadline_id,
+        Deadline.class_id == class_id,
+        Deadline.user_id == user_id,
+    )
+    deadline = db.execute(stmt).scalar_one_or_none()
+    if deadline is None:
+        return False
+    db.delete(deadline)
+    db.commit()
+    return True
+
+
+def create_document(
+    *,
+    db: Session,
+    user_id: uuid.UUID,
+    class_id: uuid.UUID,
+    filename: str,
+    title: str | None,
+    document_type: str,
+    raw_text: str | None,
+    metadata_json: dict[str, Any] | None = None,
+) -> Document:
+    doc = Document(
+        user_id=user_id,
+        class_id=class_id,
+        filename=filename,
+        title=title,
+        document_type=document_type,
+        raw_text=raw_text,
+        metadata_json=metadata_json or {},
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return doc
+
+
+def bulk_create_document_chunks(
+    *,
+    db: Session,
+    chunks: list[DocumentChunk],
+) -> int:
+    db.add_all(chunks)
+    db.commit()
+    return len(chunks)

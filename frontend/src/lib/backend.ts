@@ -13,6 +13,8 @@ export class BackendError extends Error {
   }
 }
 
+type ErrorBody = { detail?: unknown } | null;
+
 async function getAccessToken(): Promise<string> {
   const supabase = createClient();
   const { data, error } = await supabase.auth.getSession();
@@ -68,7 +70,10 @@ export async function backendFetch<T>(
 
   if (!res.ok) {
     const message =
-      (body && typeof body === 'object' && 'detail' in body && (body as any).detail) ||
+      (body &&
+        typeof body === 'object' &&
+        'detail' in body &&
+        String((body as ErrorBody)?.detail ?? '')) ||
       `Request failed (${res.status})`;
     throw new BackendError(String(message), res.status, body);
   }
@@ -88,6 +93,16 @@ export type NotesOut = {
   class_id: string;
   user_id: string;
   notes_text: string;
+  created_at: string;
+};
+
+export type DeadlineOut = {
+  id: string;
+  class_id: string;
+  user_id: string;
+  title: string;
+  due_text: string;
+  due_at: string | null;
   created_at: string;
 };
 
@@ -143,6 +158,23 @@ export function createStudyPlan(classId: string, notesId?: string) {
   });
 }
 
+export function listDeadlines(classId: string) {
+  return backendFetch<DeadlineOut[]>(`/classes/${classId}/deadlines`);
+}
+
+export function createDeadline(classId: string, title: string, due: string) {
+  return backendFetch<DeadlineOut>(`/classes/${classId}/deadlines`, {
+    method: 'POST',
+    body: JSON.stringify({ title, due }),
+  });
+}
+
+export function deleteDeadline(classId: string, deadlineId: string) {
+  return backendFetch<{ ok: boolean }>(`/classes/${classId}/deadlines/${deadlineId}`, {
+    method: 'DELETE',
+  });
+}
+
 export type SummariseOut = {
   title: string;
   summary: string;
@@ -156,5 +188,139 @@ export function summariseDocument(filename: string, raw_text: string) {
     method: 'POST',
     body: JSON.stringify({ filename, raw_text }),
   });
+}
+
+export type ExtractPdfOut = {
+  filename: string;
+  raw_text: string;
+};
+
+/** Server-side PDF text extraction (avoids pdf.js in the browser). */
+export type MaterialIngestOut = {
+  document_id: string;
+  chunks_created: number;
+};
+
+export type ClassAskSource = {
+  document_id: string;
+  filename: string;
+  document_type: string;
+  chunk_index: number;
+  snippet: string;
+};
+
+export type ClassAskOut = {
+  answer: string;
+  sources: ClassAskSource[];
+};
+
+/** Index a PDF for class-scoped RAG (chunk + embed + store). */
+export async function uploadMaterialPdf(
+  classId: string,
+  file: File,
+  documentType: string = 'syllabus'
+): Promise<MaterialIngestOut> {
+  const token = await getAccessToken();
+  const body = new FormData();
+  body.append('file', file, file.name);
+  body.append('document_type', documentType);
+  const res = await fetch(`${BACKEND_URL}/classes/${classId}/materials`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body,
+  });
+  const contentType = res.headers.get('content-type') ?? '';
+  const parsed = contentType.includes('application/json')
+    ? await res.json().catch(() => null)
+    : await res.text().catch(() => null);
+  if (!res.ok) {
+    const message =
+      (parsed &&
+        typeof parsed === 'object' &&
+        'detail' in parsed &&
+        String((parsed as ErrorBody)?.detail ?? '')) ||
+      `Request failed (${res.status})`;
+    throw new BackendError(String(message), res.status, parsed);
+  }
+  return parsed as MaterialIngestOut;
+}
+
+/** Index raw text for class-scoped RAG. */
+export async function uploadMaterialText(
+  classId: string,
+  rawText: string,
+  filename: string,
+  documentType: string = 'notes'
+): Promise<MaterialIngestOut> {
+  const token = await getAccessToken();
+  const body = new FormData();
+  body.append('raw_text', rawText);
+  body.append('filename', filename);
+  body.append('document_type', documentType);
+  const res = await fetch(`${BACKEND_URL}/classes/${classId}/materials`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body,
+  });
+  const contentType = res.headers.get('content-type') ?? '';
+  const parsed = contentType.includes('application/json')
+    ? await res.json().catch(() => null)
+    : await res.text().catch(() => null);
+  if (!res.ok) {
+    const message =
+      (parsed &&
+        typeof parsed === 'object' &&
+        'detail' in parsed &&
+        String((parsed as ErrorBody)?.detail ?? '')) ||
+      `Request failed (${res.status})`;
+    throw new BackendError(String(message), res.status, parsed);
+  }
+  return parsed as MaterialIngestOut;
+}
+
+export function askClass(
+  classId: string,
+  question: string,
+  opts?: { top_k?: number; document_type?: string | null }
+) {
+  return backendFetch<ClassAskOut>(`/classes/${classId}/ask`, {
+    method: 'POST',
+    body: JSON.stringify({
+      question,
+      top_k: opts?.top_k ?? 6,
+      document_type: opts?.document_type ?? null,
+    }),
+  });
+}
+
+export async function extractPdfText(file: File): Promise<ExtractPdfOut> {
+  const token = await getAccessToken();
+  const body = new FormData();
+  body.append('file', file, file.name);
+  const res = await fetch(`${BACKEND_URL}/summarise/extract-pdf`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body,
+  });
+  const contentType = res.headers.get('content-type') ?? '';
+  const parsed = contentType.includes('application/json')
+    ? await res.json().catch(() => null)
+    : await res.text().catch(() => null);
+  if (!res.ok) {
+    const message =
+      (parsed &&
+        typeof parsed === 'object' &&
+        'detail' in parsed &&
+        String((parsed as ErrorBody)?.detail ?? '')) ||
+      `Request failed (${res.status})`;
+    throw new BackendError(String(message), res.status, parsed);
+  }
+  return parsed as ExtractPdfOut;
 }
 

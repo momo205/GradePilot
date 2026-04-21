@@ -1,4 +1,5 @@
 fastapi
+python-multipart
 uvicorn[standard]
 pydantic
 httpx
@@ -6,8 +7,10 @@ python-jose[cryptography]
 langchain
 langgraph
 google-generativeai
+pypdf
 sqlalchemy
 psycopg[binary]
+pgvector
 
 [dev]
 ruff

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, cast
 
 import google.generativeai as genai
+from google.api_core.exceptions import ResourceExhausted
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import get_settings
@@ -14,6 +16,25 @@ logger = logging.getLogger("gradepilot.ai")
 
 class SummariseError(RuntimeError):
     pass
+
+
+class SummariseRateLimitError(SummariseError):
+    def __init__(self, message: str, *, retry_after_seconds: int | None = None):
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+_RETRY_RE = re.compile(r"Please retry in\s+([0-9]+(?:\.[0-9]+)?)s", re.IGNORECASE)
+
+
+def _parse_retry_after_seconds(msg: str) -> int | None:
+    m = _RETRY_RE.search(msg or "")
+    if not m:
+        return None
+    try:
+        return max(1, int(float(m.group(1)) + 0.999))
+    except Exception:
+        return None
 
 
 class SummaryResult(BaseModel):
@@ -75,6 +96,19 @@ Document content:
             "summarise_parse_failed err=%s preview=%r", e.__class__.__name__, raw[:300]
         )
         raise SummariseError("Model did not return valid summary JSON") from e
+    except ResourceExhausted as e:
+        # Gemini quota/rate-limit. Surface as 429 upstream (router maps this).
+        retry_after = _parse_retry_after_seconds(str(e))
+        logger.info("summarise_rate_limited retry_after=%s", retry_after)
+        if retry_after is not None:
+            raise SummariseRateLimitError(
+                f"Rate limited by Gemini API. Please retry in {retry_after}s.",
+                retry_after_seconds=retry_after,
+            ) from e
+        raise SummariseRateLimitError(
+            "Rate limited by Gemini API. Please retry shortly.",
+            retry_after_seconds=None,
+        ) from e
     except Exception as e:
         logger.exception("summarise_failed err=%s", e.__class__.__name__)
         raise SummariseError(f"Summarisation failed ({e.__class__.__name__})") from e

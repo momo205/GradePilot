@@ -11,6 +11,8 @@ from app.deps.auth import CurrentUser, get_current_user
 from app.schemas import (
     ClassCreate,
     ClassOut,
+    DeadlineCreate,
+    DeadlineOut,
     NotesCreate,
     NotesOut,
     PracticeGenerateOut,
@@ -18,8 +20,16 @@ from app.schemas import (
     StudyPlanCreate,
     StudyPlanOut,
 )
-from app.services.practice import PracticeGenerationError, generate_practice_questions
-from app.services.study_plan import StudyPlanGenerationError, generate_study_plan
+from app.services.practice import (
+    PracticeGenerationError,
+    PracticeRateLimitError,
+    generate_practice_questions,
+)
+from app.services.study_plan import (
+    StudyPlanGenerationError,
+    StudyPlanRateLimitError,
+    generate_study_plan,
+)
 
 router = APIRouter(prefix="/classes", tags=["classes"])
 
@@ -100,6 +110,11 @@ def generate_practice(
             count=payload.count,
             difficulty=payload.difficulty,
         )
+    except PracticeRateLimitError as e:
+        headers = {}
+        if getattr(e, "retry_after_seconds", None):
+            headers["Retry-After"] = str(e.retry_after_seconds)
+        raise HTTPException(status_code=429, detail=str(e), headers=headers)
     except PracticeGenerationError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return PracticeGenerateOut(questions=questions)
@@ -130,6 +145,11 @@ def create_study_plan_endpoint(
         plan_json, model_name = generate_study_plan(
             class_title=clazz.title, notes_text=notes.notes_text
         )
+    except StudyPlanRateLimitError as e:
+        headers = {}
+        if getattr(e, "retry_after_seconds", None):
+            headers["Retry-After"] = str(e.retry_after_seconds)
+        raise HTTPException(status_code=429, detail=str(e), headers=headers)
     except StudyPlanGenerationError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
@@ -142,3 +162,60 @@ def create_study_plan_endpoint(
         model=model_name,
     )
     return StudyPlanOut.model_validate(plan)
+
+
+@router.get("/{class_id}/deadlines", response_model=list[DeadlineOut])
+def list_deadlines_endpoint(
+    class_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[DeadlineOut]:
+    user_id = _user_uuid(user)
+    clazz = crud.get_class(db=db, user_id=user_id, class_id=class_id)
+    if clazz is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+    deadlines = crud.list_deadlines(db=db, user_id=user_id, class_id=class_id)
+    return [DeadlineOut.model_validate(d) for d in deadlines]
+
+
+@router.post("/{class_id}/deadlines", response_model=DeadlineOut)
+def create_deadline_endpoint(
+    class_id: uuid.UUID,
+    payload: DeadlineCreate,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DeadlineOut:
+    user_id = _user_uuid(user)
+    clazz = crud.get_class(db=db, user_id=user_id, class_id=class_id)
+    if clazz is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+    created = crud.create_deadline(
+        db=db,
+        user_id=user_id,
+        class_id=class_id,
+        title=payload.title,
+        due_text=payload.due,
+    )
+    return DeadlineOut.model_validate(created)
+
+
+@router.delete("/{class_id}/deadlines/{deadline_id}")
+def delete_deadline_endpoint(
+    class_id: uuid.UUID,
+    deadline_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    user_id = _user_uuid(user)
+    clazz = crud.get_class(db=db, user_id=user_id, class_id=class_id)
+    if clazz is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+    ok = crud.delete_deadline(
+        db=db,
+        user_id=user_id,
+        class_id=class_id,
+        deadline_id=deadline_id,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Deadline not found")
+    return {"ok": True}

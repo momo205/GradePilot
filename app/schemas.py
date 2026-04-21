@@ -91,3 +91,49 @@ class SummariseOut(BaseModel):
     key_topics: list[str]
     important_dates: list[str]
     extracted_notes: str
+
+
+class ExtractPdfOut(BaseModel):
+    filename: str
+    raw_text: str
+
+
+class DeadlineCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    due: str = Field(min_length=1, max_length=500)
+
+
+class DeadlineOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    class_id: uuid.UUID
+    user_id: uuid.UUID
+    title: str
+    due_text: str
+    due_at: datetime | None
+    created_at: datetime
+
+
+class MaterialIngestOut(BaseModel):
+    document_id: uuid.UUID
+    chunks_created: int
+
+
+class ClassAskRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    top_k: int = Field(default=6, ge=1, le=20)
+    document_type: str | None = Field(default=None, max_length=50)
+
+
+class ClassAskSource(BaseModel):
+    document_id: str
+    filename: str
+    document_type: str
+    chunk_index: int
+    snippet: str
+
+
+class ClassAskOut(BaseModel):
+    answer: str
+    sources: list[ClassAskSource]

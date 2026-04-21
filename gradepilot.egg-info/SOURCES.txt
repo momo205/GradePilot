@@ -10,4 +10,8 @@ gradepilot.egg-info/requires.txt
 gradepilot.egg-info/top_level.txt
 tests/test_auth.py
 tests/test_health.py
+tests/test_practice.py
+tests/test_rag_chunking.py
+tests/test_rag_retrieve_sqlite_fallback.py
+tests/test_services.py
 tests/test_study_plan.py

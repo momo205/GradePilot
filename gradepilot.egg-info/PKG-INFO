@@ -6,6 +6,7 @@ Author: GradePilot Team
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
 Requires-Dist: fastapi
+Requires-Dist: python-multipart
 Requires-Dist: uvicorn[standard]
 Requires-Dist: pydantic
 Requires-Dist: httpx
@@ -13,8 +14,10 @@ Requires-Dist: python-jose[cryptography]
 Requires-Dist: langchain
 Requires-Dist: langgraph
 Requires-Dist: google-generativeai
+Requires-Dist: pypdf
 Requires-Dist: sqlalchemy
 Requires-Dist: psycopg[binary]
+Requires-Dist: pgvector
 Provides-Extra: dev
 Requires-Dist: ruff; extra == "dev"
 Requires-Dist: black; extra == "dev"
