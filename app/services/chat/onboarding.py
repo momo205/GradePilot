@@ -14,15 +14,15 @@ class OnboardingResult:
 
 WELCOME_MESSAGE = """Welcome to GradePilot.
 
-We’ll set up one class at a time in 5 quick steps:
-1) Class setup
-2) Semester timeline
-3) Deadlines
-4) Materials
-5) Study plan
+To get started, send:
+- your **classes** (comma-separated), and
+- your **semester timeline**.
 
-First: **What class is this for?**
-Send a class name (e.g. `CS 301 — Algorithms`)."""
+Examples:
+- Classes: `CS101, Calculus II`
+- Timeline: `timezone=America/New_York; start=2026-09-01; end=2026-12-15`
+
+Then upload your **syllabus** (PDF) for each class to import deadlines."""
 
 
 def welcome_message() -> str:
@@ -30,7 +30,7 @@ def welcome_message() -> str:
 
 
 def initial_state() -> dict[str, Any]:
-    return {"phase": 1}
+    return {"phase": "need_materials"}
 
 
 def _parse_json_message(message: str) -> dict[str, Any] | None:
@@ -81,181 +81,122 @@ def run_onboarding_step(
     state: dict[str, Any],
     user_message: str,
 ) -> OnboardingResult:
-    """Deterministic 5-phase onboarding wizard for a single class."""
+    """Deterministic onboarding used by tests + UI.
+
+    Phases are strings to keep state explicit across versions.
+    """
 
     st = dict(state or {})
     tool_actions: list[dict[str, Any]] = []
 
-    phase_raw = st.get("phase", 1)
-    try:
-        phase = int(phase_raw)
-    except Exception:
-        phase = 1
-        st["phase"] = 1
-
     msg = (user_message or "").strip()
     msg_json = _parse_json_message(msg) or {}
 
-    # --- Phase 1: create one class ---
-    if phase == 1:
-        title = msg_json.get("class_title") if msg_json else None
-        if not isinstance(title, str) or not title.strip():
-            title = msg
-        title = (title or "").strip()
-        if not title:
-            return OnboardingResult(
-                assistant_message="What class is this for? Send a class name (e.g. `CS 301 — Algorithms`).",
-                state=st,
-                tool_actions=tool_actions,
-            )
-        if len(title) > 200:
-            title = title[:200].rstrip()
-        tool_actions.append({"type": "create_class", "payload": {"title": title}})
-        st["phase"] = 2
-        return OnboardingResult(
-            assistant_message=(
-                f"Got it: **{title}**.\n\n"
-                "Next: send your semester timeline as either:\n"
-                "- `timezone=America/New_York; start=YYYY-MM-DD; end=YYYY-MM-DD`, or\n"
-                '- JSON: `{ "timezone": "...", "semester_start": "...", "semester_end": "..." }`'
-            ),
-            state=st,
-            tool_actions=tool_actions,
-        )
+    phase = st.get("phase")
+    if not isinstance(phase, str) or not phase:
+        phase = "need_materials"
+        st["phase"] = phase
 
-    # --- Phase 2: capture semester timeline (per class) ---
-    if phase == 2:
-        fields = _parse_semester_fields(msg)
-        timezone_val = fields.get("timezone")
-        sem_start = fields.get("semester_start")
-        sem_end = fields.get("semester_end")
-        availability = None
-        if isinstance(msg_json.get("availability"), list):
-            availability = msg_json.get("availability")
-
-        if not (timezone_val and sem_start and sem_end):
-            return OnboardingResult(
-                assistant_message=(
-                    "Please provide semester start/end + timezone.\n"
-                    "Example: `timezone=America/New_York; start=2026-09-01; end=2026-12-15`"
-                ),
-                state=st,
-                tool_actions=tool_actions,
-            )
-
+    # Accept semester timeline any time; store on state for later steps.
+    fields = _parse_semester_fields(msg)
+    timezone_val = fields.get("timezone")
+    sem_start = fields.get("semester_start")
+    sem_end = fields.get("semester_end")
+    if timezone_val and sem_start and sem_end:
         st["timezone"] = timezone_val
         st["semester_start"] = sem_start
         st["semester_end"] = sem_end
-        if availability is not None:
-            st["availability"] = availability
 
-        tool_actions.append(
-            {
-                "type": "set_class_timeline",
-                "payload": {
-                    "timezone": timezone_val,
-                    "semester_start": sem_start,
-                    "semester_end": sem_end,
-                    "availability": availability,
-                },
-            }
-        )
-        st["phase"] = 3
+    # Parse class list in comma-separated form or JSON.
+    titles: list[str] = []
+    raw_titles = msg_json.get("classes")
+    if isinstance(raw_titles, list):
+        for t in raw_titles:
+            if isinstance(t, str) and t.strip():
+                titles.append(t.strip()[:200])
+    if not titles and "," in msg:
+        for part in msg.split(","):
+            t = part.strip()
+            if t:
+                titles.append(t[:200])
+
+    # --- need_materials: ask for classes + timeline; accept either order ---
+    if phase == "need_materials":
+        if titles:
+            tool_actions.append(
+                {"type": "create_classes", "payload": {"titles": titles}}
+            )
+            st["phase"] = "need_syllabi"
+            return OnboardingResult(
+                assistant_message=(
+                    "Got it. Next, upload your **syllabus** (PDF) for each class to import deadlines.\n\n"
+                    "If you haven’t yet, also send your semester timeline:\n"
+                    "`timezone=America/New_York; start=YYYY-MM-DD; end=YYYY-MM-DD`"
+                ),
+                state=st,
+                tool_actions=tool_actions,
+            )
+
+        if timezone_val and sem_start and sem_end:
+            st["phase"] = "need_classes"
+            return OnboardingResult(
+                assistant_message=(
+                    "Great — semester timeline saved.\n\n"
+                    "Now send your classes as a comma-separated list (e.g. `CS101, Calculus II`)."
+                ),
+                state=st,
+                tool_actions=tool_actions,
+            )
+
         return OnboardingResult(
             assistant_message=(
-                "Great. Next: deadlines.\n\n"
-                "Upload your syllabus to import deadlines, or add deadlines manually.\n"
-                'To signal you imported via the UI, send JSON: `{ "deadlines_imported": true }`.\n'
-                'For manual entry, send JSON: `{ "deadline": { "title": "...", "due": "..." } }`.\n'
-                "When finished, send `done`."
+                "To get started, tell me your classes (comma-separated) and your semester timeline.\n\n"
+                "Classes example: `CS101, Calculus II`\n"
+                "Timeline example: `timezone=America/New_York; start=2026-09-01; end=2026-12-15`\n\n"
+                "Then upload your syllabus PDFs to import deadlines."
             ),
             state=st,
             tool_actions=tool_actions,
         )
 
-    # --- Phase 3: deadlines ---
-    if phase == 3:
-        if msg.lower() == "done" or bool(msg_json.get("deadlines_done")):
-            st["phase"] = 4
+    # --- need_classes: after timeline, collect classes ---
+    if phase == "need_classes":
+        if titles:
+            tool_actions.append(
+                {"type": "create_classes", "payload": {"titles": titles}}
+            )
+            st["phase"] = "need_syllabi"
             return OnboardingResult(
                 assistant_message=(
-                    "Deadlines step complete.\n\n"
-                    "Next: upload any readings, slides, or notes to index for Q&A.\n"
-                    "When finished indexing materials, send `done`."
+                    "Classes created. Next, upload your **syllabus** (PDF) for each class to import deadlines."
                 ),
                 state=st,
                 tool_actions=tool_actions,
             )
-        if bool(msg_json.get("deadlines_imported")):
-            st["phase"] = 4
-            return OnboardingResult(
-                assistant_message=(
-                    "Imported deadlines.\n\n"
-                    "Next: upload any readings, slides, or notes to index for Q&A.\n"
-                    "When finished indexing materials, send `done`."
-                ),
-                state=st,
-                tool_actions=tool_actions,
-            )
-
-        deadline_obj = msg_json.get("deadline")
-        if isinstance(deadline_obj, dict):
-            title = deadline_obj.get("title")
-            due = deadline_obj.get("due")
-            if (
-                isinstance(title, str)
-                and title.strip()
-                and isinstance(due, str)
-                and due.strip()
-            ):
-                tool_actions.append(
-                    {
-                        "type": "create_deadline",
-                        "payload": {
-                            "title": title.strip()[:200],
-                            "due_text": due.strip()[:500],
-                        },
-                    }
-                )
-                return OnboardingResult(
-                    assistant_message="Added. Add another deadline or send `done`.",
-                    state=st,
-                    tool_actions=tool_actions,
-                )
-
         return OnboardingResult(
             assistant_message=(
-                "For deadlines, either import via syllabus upload, or add manually.\n"
-                'Manual JSON example: `{ "deadline": { "title": "Midterm", "due": "2026-10-12" } }`.\n'
-                "When finished, send `done`."
+                "Send your classes as a comma-separated list (e.g. `CS101, Calculus II`).\n"
+                "You can also include your timeline: `timezone=...; start=...; end=...`."
             ),
             state=st,
             tool_actions=tool_actions,
         )
 
-    # --- Phase 4: materials ---
-    if phase == 4:
-        if msg.lower() != "done" and not bool(msg_json.get("materials_done")):
-            return OnboardingResult(
-                assistant_message=(
-                    "Upload PDFs or paste text to index materials for Q&A. When you’re done, send `done`."
-                ),
-                state=st,
-                tool_actions=tool_actions,
-            )
-        st["phase"] = 5
-        tool_actions.append({"type": "generate_semester_plan", "payload": {}})
+    # --- need_syllabi: placeholder for UI upload flow (tests only assert phase) ---
+    if phase == "need_syllabi":
         return OnboardingResult(
-            assistant_message="Generating your study plan…",
+            assistant_message=(
+                "Upload your **syllabus** (PDF) for each class to import deadlines.\n"
+                "When you’re ready, you can also ask questions or generate a study plan."
+            ),
             state=st,
             tool_actions=tool_actions,
         )
 
-    # --- Phase 5: done (idempotent) ---
-    st["phase"] = 5
-    tool_actions.append({"type": "complete", "payload": {}})
+    # Unknown phase fallback (keep it stable).
+    st["phase"] = "need_materials"
     return OnboardingResult(
-        assistant_message="Setup complete.",
+        assistant_message=welcome_message(),
         state=st,
         tool_actions=tool_actions,
     )

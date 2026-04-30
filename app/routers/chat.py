@@ -104,10 +104,30 @@ def post_message(
             payload_raw if isinstance(payload_raw, dict) else {}
         )
 
-        if a_type == "create_class":
-            title = payload_obj.get("title")
-            if isinstance(title, str) and title.strip():
-                created = crud.create_class(db=db, user_id=user_id, title=title.strip())
+        if a_type == "create_classes":
+            titles_raw = payload_obj.get("titles")
+            titles: list[str] = []
+            if isinstance(titles_raw, list):
+                for t in titles_raw:
+                    if isinstance(t, str) and t.strip():
+                        titles.append(t.strip())
+
+            created_ids: list[str] = []
+            for class_title in titles:
+                created = crud.create_class(
+                    db=db, user_id=user_id, title=class_title.strip()[:200]
+                )
+                created_ids.append(str(created.id))
+
+            if created_ids:
+                state_json["class_ids"] = created_ids
+
+        elif a_type == "create_class":
+            title_raw = payload_obj.get("title")
+            if isinstance(title_raw, str) and title_raw.strip():
+                created = crud.create_class(
+                    db=db, user_id=user_id, title=title_raw.strip()
+                )
                 class_id = created.id
                 state_json["class_id"] = str(created.id)
 
@@ -153,14 +173,14 @@ def post_message(
                 except ValueError:
                     class_id = None
             if class_id is not None:
-                title = payload_obj.get("title")
+                title_raw = payload_obj.get("title")
                 due_text = payload_obj.get("due_text")
-                if isinstance(title, str) and isinstance(due_text, str):
+                if isinstance(title_raw, str) and isinstance(due_text, str):
                     crud.create_deadline(
                         db=db,
                         user_id=user_id,
                         class_id=class_id,
-                        title=title,
+                        title=title_raw,
                         due_text=due_text,
                     )
 
