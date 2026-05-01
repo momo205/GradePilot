@@ -304,7 +304,7 @@ def test_classes_notes_deadlines_and_plans_endpoints(
 
     r = client.post(
         f"/classes/{class_id}/practice",
-        json={"topic": "SQL", "count": 1, "difficulty": "easy"},
+        json={"topic": "SQL", "count": 1, "difficulty": "Easy"},
     )
     assert r.status_code == 200
     assert len(r.json()["questions"]) == 1
@@ -354,3 +354,53 @@ def test_classes_notes_deadlines_and_plans_endpoints(
     r = client.delete(f"/classes/{class_id}/deadlines/{deadline_id}")
     assert r.status_code == 200
     assert r.json() == {"ok": True}
+
+
+def test_summarise_and_google_routes_smoke(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # --- summarise ---
+    import app.routers.summarise as summarise_router
+
+    class _Sum:
+        def __init__(self) -> None:
+            self.title = "Doc"
+            self.summary = "Summary"
+            self.key_topics = ["t1"]
+            self.important_dates = []
+            self.extracted_notes = "Notes"
+
+    def _fake_summarise_document(*args: Any, **kwargs: Any) -> _Sum:
+        return _Sum()
+
+    monkeypatch.setattr(
+        summarise_router, "summarise_document", _fake_summarise_document
+    )
+
+    r = client.post("/summarise", json={"filename": "x.txt", "raw_text": "hello"})
+    assert r.status_code == 200
+    assert r.json()["title"] == "Doc"
+
+    # --- google integrations (error-path coverage without real oauth) ---
+    # For start we expect 503 since env isn't configured in CI.
+    r = client.get("/integrations/google/oauth/start")
+    assert r.status_code in (503, 500)
+
+    # Callback also should fail early on missing config.
+    r = client.get("/integrations/google/oauth/callback?code=abc")
+    assert r.status_code in (503, 500)
+
+    # Calendar sync: create class + deadline then expect 503/400 depending on config path.
+    r = client.post("/classes", json={"title": "Calendar"})
+    assert r.status_code == 200
+    class_id = r.json()["id"]
+
+    r = client.post(
+        f"/classes/{class_id}/deadlines",
+        json={"title": "HW", "due": "tomorrow"},
+    )
+    assert r.status_code == 200
+
+    r = client.post(f"/integrations/google/calendar/sync/{class_id}")
+    assert r.status_code in (503, 400)
