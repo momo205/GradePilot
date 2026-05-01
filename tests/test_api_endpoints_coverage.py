@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import Base
@@ -18,7 +19,9 @@ from app.main import app
 @pytest.fixture()
 def client() -> Generator[TestClient, None, None]:
     engine = create_engine(
-        "sqlite+pysqlite:///:memory:", connect_args={"check_same_thread": False}
+        "sqlite+pysqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine)
     SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
