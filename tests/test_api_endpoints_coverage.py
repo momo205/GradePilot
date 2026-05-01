@@ -97,7 +97,8 @@ def test_chat_session_create_get_and_post_message_creates_classes(
 
 
 def test_rag_ask_returns_fallback_when_no_chunks(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Create class to satisfy "Class not found" check.
     r = client.post("/classes", json={"title": "History"})
@@ -111,9 +112,7 @@ def test_rag_ask_returns_fallback_when_no_chunks(
 
     monkeypatch.setattr(rag_router, "retrieve_chunks", _fake_retrieve_chunks)
 
-    r = client.post(
-        f"/classes/{class_id}/ask", json={"question": "What is the exam?"}
-    )
+    r = client.post(f"/classes/{class_id}/ask", json={"question": "What is the exam?"})
     assert r.status_code == 200
     out = r.json()
     assert out["sources"] == []
@@ -121,7 +120,8 @@ def test_rag_ask_returns_fallback_when_no_chunks(
 
 
 def test_rag_upload_material_raw_text_path(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r = client.post("/classes", json={"title": "Biology"})
     assert r.status_code == 200
