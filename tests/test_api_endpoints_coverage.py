@@ -151,4 +151,3 @@ def test_rag_upload_material_raw_text_path(
     body = r.json()
     assert body["chunks_created"] == 2
     assert "document_id" in body
-
