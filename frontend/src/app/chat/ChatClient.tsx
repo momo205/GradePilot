@@ -20,7 +20,8 @@ type ToolCard = { title: string; detail?: string };
 
 function toolActionToCard(a: ChatToolAction): ToolCard | null {
   if (a.type === 'create_class') {
-    const title = String((a.payload as any)?.title ?? '');
+    const p = a.payload as Record<string, unknown>;
+    const title = typeof p.title === 'string' ? p.title : String(p.title ?? '');
     return { title: 'Created class', detail: title };
   }
   return { title: `Action: ${a.type}` };
@@ -36,7 +37,13 @@ export default function ChatClient() {
   const [chat, setChat] = useState<ChatReplyOut | null>(null);
   const [toolCards, setToolCards] = useState<ToolCard[]>([]);
 
-  const phase = Number((chat?.state?.phase as any) ?? 1) || 1;
+  const rawPhase = chat?.state?.phase;
+  const phase =
+    typeof rawPhase === 'number'
+      ? rawPhase
+      : typeof rawPhase === 'string'
+        ? Number(rawPhase) || 1
+        : 1;
   const classId = useMemo(() => {
     const direct = chat?.class_id;
     if (typeof direct === 'string' && direct) return direct;
@@ -352,7 +359,9 @@ export default function ChatClient() {
                     <label className="text-xs text-slate-400">Document type</label>
                     <select
                       value={materialDocType}
-                      onChange={(e) => setMaterialDocType(e.target.value as any)}
+                      onChange={(e) =>
+                        setMaterialDocType(e.target.value as typeof materialDocType)
+                      }
                       className="bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm min-w-[160px]"
                     >
                       <option value="reading">reading</option>
