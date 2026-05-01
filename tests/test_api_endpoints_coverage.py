@@ -382,16 +382,55 @@ def test_summarise_and_google_routes_smoke(
     assert r.status_code == 200
     assert r.json()["title"] == "Doc"
 
-    # --- google integrations (error-path coverage without real oauth) ---
-    # For start we expect 503 since env isn't configured in CI.
+    # --- google integrations (mocked, no real oauth/calendar calls) ---
+    # get_settings() requires these to be present even if we mock the rest.
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite://")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "client-id")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost/callback")
+
+    import datetime as _dt
+
+    import app.routers.integrations_google as google_router
+
+    class _Creds:
+        def __init__(self, refresh_token: str | None) -> None:
+            self.refresh_token = refresh_token
+            self.token = "access"
+            self.expiry = _dt.datetime.now(_dt.timezone.utc)
+            self.scopes = ["scope"]
+
+    class _Flow:
+        def __init__(self, refresh_token: str | None = "refresh") -> None:
+            self._refresh_token = refresh_token
+            self.credentials = _Creds(refresh_token)
+
+        def authorization_url(self, *args: Any, **kwargs: Any) -> tuple[str, str]:
+            return ("https://accounts.google.com/o/oauth2/auth?x=y", "state")
+
+        def fetch_token(self, *args: Any, **kwargs: Any) -> None:
+            self.credentials = _Creds(self._refresh_token)
+
+    class _FlowFactory:
+        @staticmethod
+        def from_client_config(*args: Any, **kwargs: Any) -> _Flow:
+            return _Flow()
+
+    # Patch the imported Flow symbol inside integrations_google router.
+    monkeypatch.setattr(google_router, "Flow", _FlowFactory)
+
+    # OAuth start should now succeed and return a URL.
     r = client.get("/integrations/google/oauth/start")
-    assert r.status_code in (503, 500)
+    assert r.status_code == 200
+    assert "authorization_url" in r.json()
 
-    # Callback also should fail early on missing config.
+    # OAuth callback should succeed and store integration in sqlite via real CRUD.
     r = client.get("/integrations/google/oauth/callback?code=abc")
-    assert r.status_code in (503, 500)
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
 
-    # Calendar sync: create class + deadline then expect 503/400 depending on config path.
+    # Calendar sync: create class + deadline then run mocked sync.
     r = client.post("/classes", json={"title": "Calendar"})
     assert r.status_code == 200
     class_id = r.json()["id"]
@@ -402,5 +441,27 @@ def test_summarise_and_google_routes_smoke(
     )
     assert r.status_code == 200
 
+    class _Upserted:
+        def __init__(self) -> None:
+            self.calendar_id = "cal"
+            self.event_id = "evt"
+
+    monkeypatch.setattr(
+        google_router,
+        "build_google_credentials_for_calendar",
+        lambda *args, **kwargs: object(),
+    )
+    monkeypatch.setattr(
+        google_router,
+        "get_or_create_gradepilot_calendar",
+        lambda *args, **kwargs: "cal",
+    )
+    monkeypatch.setattr(
+        google_router,
+        "upsert_deadline_event",
+        lambda *args, **kwargs: _Upserted(),
+    )
+
     r = client.post(f"/integrations/google/calendar/sync/{class_id}")
-    assert r.status_code in (503, 400)
+    assert r.status_code == 200
+    assert r.json()["created"] == 1
