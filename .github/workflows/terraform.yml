@@ -1,0 +1,70 @@
+name: Terraform (GCP)
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+      TF_VAR_region: ${{ secrets.GCP_REGION }}
+      TF_VAR_github_repository: ${{ github.repository }}
+      TF_VAR_artifact_registry_repo: ${{ secrets.GCP_ARTIFACT_REPO }}
+      TF_VAR_api_image: ${{ secrets.GCP_API_IMAGE }}
+      TF_VAR_web_image: ${{ secrets.GCP_WEB_IMAGE }}
+      TF_VAR_supabase_url: ${{ secrets.SUPABASE_URL }}
+      TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
+      TF_VAR_google_api_key: ${{ secrets.GOOGLE_API_KEY }}
+      TF_VAR_google_oauth_client_id: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+      TF_VAR_google_oauth_client_secret: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+      TF_VAR_google_oauth_redirect_uri: ${{ secrets.GOOGLE_OAUTH_REDIRECT_URI }}
+      TF_VAR_frontend_supabase_url: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      TF_VAR_frontend_supabase_anon_key: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_TERRAFORM_SERVICE_ACCOUNT }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        run: terraform init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}"
+
+      - name: Terraform fmt
+        run: terraform fmt -check
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        if: github.event_name == 'pull_request'
+        run: terraform plan
+
+      - name: Terraform apply
+        if: github.event_name == 'push'
+        run: terraform apply -auto-approve
+

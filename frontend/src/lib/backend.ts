@@ -65,12 +65,9 @@ export async function backendFetch<T>(
         Authorization: `Bearer ${token}`,
       },
     });
-  } catch (error: any) {
-    throw new BackendError(
-      `Network error: ${error.message}. Is the backend running?`,
-      0,
-      null
-    );
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new BackendError(`Network error: ${msg}. Is the backend running?`, 0, null);
   }
 
   const contentType = res.headers.get('content-type') ?? '';

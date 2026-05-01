@@ -1,0 +1,165 @@
+name: Deploy (Cloud Run)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      REGION: ${{ secrets.GCP_REGION }}
+      ARTIFACT_REPO: ${{ secrets.GCP_ARTIFACT_REPO }}
+      API_SERVICE: gradepilot-api
+      WEB_SERVICE: gradepilot-web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push API image
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/api:${{ github.sha }}
+        run: |
+          docker build -f Dockerfile.api -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy API to Cloud Run
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/api:${{ github.sha }}
+        run: |
+          gcloud run deploy "${API_SERVICE}" \
+            --image "$IMAGE" \
+            --region "${REGION}" \
+            --platform managed \
+            --allow-unauthenticated
+
+      - name: Fetch API URL (for frontend build)
+        id: api_url
+        run: |
+          API_URL="$(gcloud run services describe "${API_SERVICE}" --region "${REGION}" --format='value(status.url)')"
+          echo "api_url=${API_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Web image
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/web:${{ github.sha }}
+          NEXT_PUBLIC_BACKEND_URL: ${{ steps.api_url.outputs.api_url }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          docker build -f frontend/Dockerfile -t "$IMAGE" frontend \
+            --build-arg NEXT_PUBLIC_BACKEND_URL="$NEXT_PUBLIC_BACKEND_URL" \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
+            --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY="$NEXT_PUBLIC_SUPABASE_ANON_KEY"
+          docker push "$IMAGE"
+
+      - name: Deploy Web to Cloud Run
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/web:${{ github.sha }}
+        run: |
+          gcloud run deploy "${WEB_SERVICE}" \
+            --image "$IMAGE" \
+            --region "${REGION}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars "NEXT_PUBLIC_BACKEND_URL=${{ steps.api_url.outputs.api_url }}"
+
+name: Deploy (Cloud Run)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ secrets.GCP_REGION }}
+      API_SERVICE_NAME: ${{ secrets.GCP_API_SERVICE_NAME || 'gradepilot-api' }}
+      WEB_SERVICE_NAME: ${{ secrets.GCP_WEB_SERVICE_NAME || 'gradepilot-web' }}
+      API_IMAGE: ${{ secrets.GCP_API_IMAGE }}
+      WEB_IMAGE: ${{ secrets.GCP_WEB_IMAGE }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT || secrets.GCP_TERRAFORM_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth for Artifact Registry
+        run: gcloud auth configure-docker "${{ env.GCP_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.api
+          push: true
+          tags: ${{ env.API_IMAGE }}
+
+      - name: Build & push Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ env.WEB_IMAGE }}
+
+      - name: Deploy API to Cloud Run
+        run: |
+          gcloud run deploy "${API_SERVICE_NAME}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --image "${API_IMAGE}" \
+            --platform managed \
+            --quiet
+
+      - name: Deploy Web to Cloud Run
+        run: |
+          gcloud run deploy "${WEB_SERVICE_NAME}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --image "${WEB_IMAGE}" \
+            --platform managed \
+            --quiet
+
