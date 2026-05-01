@@ -53,6 +53,12 @@ jobs:
           push: true
           tags: ${{ env.API_IMAGE }}
 
+      - name: Fetch API URL (for frontend build)
+        id: api_url
+        run: |
+          API_URL="$(gcloud run services describe "${API_SERVICE_NAME}" --region "${GCP_REGION}" --format='value(status.url)')"
+          echo "api_url=${API_URL}" >> "$GITHUB_OUTPUT"
+
       - name: Build & push Web image
         uses: docker/build-push-action@v6
         with:
@@ -60,6 +66,10 @@ jobs:
           file: ./frontend/Dockerfile
           push: true
           tags: ${{ env.WEB_IMAGE }}
+          build-args: |
+            NEXT_PUBLIC_BACKEND_URL=${{ steps.api_url.outputs.api_url }}
+            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Deploy API to Cloud Run
         run: |
@@ -77,5 +87,6 @@ jobs:
             --region "${GCP_REGION}" \
             --image "${WEB_IMAGE}" \
             --platform managed \
+            --set-env-vars "NEXT_PUBLIC_BACKEND_URL=${{ steps.api_url.outputs.api_url }}" \
             --quiet
 
