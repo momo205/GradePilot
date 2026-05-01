@@ -99,6 +99,90 @@ def test_chat_session_create_get_and_post_message_creates_classes(
     assert any(a["type"] == "create_classes" for a in body["tool_actions"])
 
 
+def test_chat_post_message_executes_tool_actions_happy_path(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Drive the chat router through most tool-action branches in one request by
+    mocking onboarding output.
+    """
+
+    # Create a chat session
+    r = client.post("/chat/sessions")
+    assert r.status_code == 200
+    session_id = r.json()["id"]
+
+    # Seed a class we can refer to later (and ensure db path is exercised)
+    r = client.post("/classes", json={"title": "Algorithms"})
+    assert r.status_code == 200
+
+    import app.routers.chat as chat_router
+
+    class _Onboarding:
+        def __init__(self, state: dict[str, Any], tool_actions: list[dict[str, Any]]):
+            self.assistant_message = "ok"
+            self.state = state
+            self.tool_actions = tool_actions
+
+    # Monkeypatch semester plan generation to avoid external calls.
+    def _fake_generate_semester_study_plan(
+        *args: Any, **kwargs: Any
+    ) -> tuple[dict[str, Any], str]:
+        return ({"weeks": [{"week": 1, "tasks": ["read chapter 1"]}]}, "fake-model")
+
+    monkeypatch.setattr(
+        chat_router, "generate_semester_study_plan", _fake_generate_semester_study_plan
+    )
+
+    # Return tool actions that hit most branches in chat.post_message.
+    def _fake_run_onboarding_step(*args: Any, **kwargs: Any) -> _Onboarding:
+        state = {
+            "phase": "need_syllabi",
+            "timezone": "America/New_York",
+            "semester_start": "2026-09-01",
+            "semester_end": "2026-12-15",
+            "availability": [
+                {"day": "Mon", "start_time": "09:00", "end_time": "11:00"},
+            ],
+        }
+        tool_actions = [
+            {"type": "create_classes", "payload": {"titles": ["Math", "Physics"]}},
+            {"type": "create_class", "payload": {"title": "Chemistry"}},
+            {
+                "type": "set_class_timeline",
+                "payload": {
+                    "semester_start": "2026-09-01",
+                    "semester_end": "2026-12-15",
+                    "timezone": "America/New_York",
+                    "availability": [
+                        {"day": "Tue", "start_time": "10:00", "end_time": "12:00"},
+                    ],
+                },
+            },
+            {
+                "type": "create_deadline",
+                "payload": {"title": "HW1", "due_text": "next week"},
+            },
+            {"type": "generate_semester_plan", "payload": {}},
+            {"type": "complete", "payload": {}},
+        ]
+        return _Onboarding(state=state, tool_actions=tool_actions)
+
+    monkeypatch.setattr(chat_router, "run_onboarding_step", _fake_run_onboarding_step)
+
+    r = client.post(
+        f"/chat/sessions/{session_id}/messages",
+        json={"content": "hello"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["session"]["id"] == session_id
+    assert body["complete"] is True
+    assert body["class_id"] is not None
+    assert body["next_url"].startswith("/classes/")
+
+
 def test_rag_ask_returns_fallback_when_no_chunks(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -154,3 +238,119 @@ def test_rag_upload_material_raw_text_path(
     body = r.json()
     assert body["chunks_created"] == 2
     assert "document_id" in body
+
+
+def test_classes_notes_deadlines_and_plans_endpoints(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r = client.post("/classes", json={"title": "Databases"})
+    assert r.status_code == 200
+    class_id = r.json()["id"]
+
+    # Notes
+    r = client.post(f"/classes/{class_id}/notes", json={"notes_text": "hello"})
+    assert r.status_code == 200
+    notes_id = r.json()["id"]
+
+    r = client.get(f"/classes/{class_id}/notes")
+    assert r.status_code == 200
+    assert any(n["id"] == notes_id for n in r.json())
+
+    # Deadlines CRUD
+    r = client.post(
+        f"/classes/{class_id}/deadlines",
+        json={"title": "Midterm", "due": "2026-10-15"},
+    )
+    assert r.status_code == 200
+    deadline_id = r.json()["id"]
+
+    r = client.get(f"/classes/{class_id}/deadlines")
+    assert r.status_code == 200
+    assert any(d["id"] == deadline_id for d in r.json())
+
+    r = client.patch(
+        f"/classes/{class_id}/deadlines/{deadline_id}",
+        json={"completed": True},
+    )
+    assert r.status_code == 200
+    assert r.json()["completed_at"] is not None
+
+    # Timeline update
+    r = client.patch(
+        f"/classes/{class_id}",
+        json={
+            "semester_start": "2026-09-01",
+            "semester_end": "2026-12-15",
+            "timezone": "America/New_York",
+            "availability": [
+                {"day": "Mon", "start_time": "09:00", "end_time": "10:00"}
+            ],
+        },
+    )
+    assert r.status_code == 200
+
+    # Mock practice generation
+    import app.routers.classes as classes_router
+
+    def _fake_generate_practice_questions(
+        *args: Any, **kwargs: Any
+    ) -> list[dict[str, Any]]:
+        return [{"q": "What is SQL?", "a": "Structured Query Language"}]
+
+    monkeypatch.setattr(
+        classes_router, "generate_practice_questions", _fake_generate_practice_questions
+    )
+
+    r = client.post(
+        f"/classes/{class_id}/practice",
+        json={"topic": "SQL", "count": 1, "difficulty": "easy"},
+    )
+    assert r.status_code == 200
+    assert len(r.json()["questions"]) == 1
+
+    # Mock study plan generation
+    def _fake_generate_study_plan(
+        *args: Any, **kwargs: Any
+    ) -> tuple[dict[str, Any], str]:
+        return ({"days": [{"day": 1, "tasks": ["read notes"]}]}, "fake-model")
+
+    monkeypatch.setattr(
+        classes_router, "generate_study_plan", _fake_generate_study_plan
+    )
+
+    r = client.post(f"/classes/{class_id}/study-plan", json={"notes_id": notes_id})
+    assert r.status_code == 200
+    plan_id = r.json()["id"]
+
+    r = client.get(f"/classes/{class_id}/study-plan/latest")
+    assert r.status_code == 200
+    assert r.json()["id"] == plan_id
+
+    # Mock semester plan generation
+    def _fake_generate_semester_plan(
+        *args: Any, **kwargs: Any
+    ) -> tuple[dict[str, Any], str]:
+        return ({"weeks": [{"week": 1, "tasks": ["do HW1"]}]}, "fake-model")
+
+    monkeypatch.setattr(
+        classes_router, "generate_semester_study_plan", _fake_generate_semester_plan
+    )
+
+    r = client.post(
+        f"/classes/{class_id}/study-plan/semester",
+        json={
+            "semester_start": "2026-09-01",
+            "semester_end": "2026-12-15",
+            "timezone": "America/New_York",
+            "availability": [
+                {"day": "Mon", "start_time": "09:00", "end_time": "10:00"}
+            ],
+        },
+    )
+    assert r.status_code == 200
+
+    # Delete deadline
+    r = client.delete(f"/classes/{class_id}/deadlines/{deadline_id}")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
