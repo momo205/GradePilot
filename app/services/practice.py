@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, cast
+import re
 
-import google.generativeai as genai
+from google.api_core.exceptions import ResourceExhausted
+from google import genai
+from google.genai import types
 from pydantic import ValidationError
 
 from app.core.config import get_settings
@@ -15,6 +17,25 @@ logger = logging.getLogger("gradepilot.ai")
 
 class PracticeGenerationError(RuntimeError):
     pass
+
+
+class PracticeRateLimitError(PracticeGenerationError):
+    def __init__(self, message: str, *, retry_after_seconds: int | None = None):
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+_RETRY_RE = re.compile(r"Please retry in\s+([0-9]+(?:\.[0-9]+)?)s", re.IGNORECASE)
+
+
+def _parse_retry_after_seconds(msg: str) -> int | None:
+    m = _RETRY_RE.search(msg or "")
+    if not m:
+        return None
+    try:
+        return max(1, int(float(m.group(1)) + 0.999))
+    except Exception:
+        return None
 
 
 def _build_prompt(*, class_title: str, topic: str, count: int, difficulty: str) -> str:
@@ -50,22 +71,21 @@ def generate_practice_questions(
     if not settings.google_api_key:
         raise PracticeGenerationError("GOOGLE_API_KEY is not configured")
 
-    genai_any = cast(Any, genai)
-    genai_any.configure(api_key=settings.google_api_key)
-    model_name = settings.google_model.removeprefix("models/")
-    model = genai_any.GenerativeModel(model_name)
+    client = genai.Client(api_key=settings.google_api_key)
+    model_name = settings.google_model
     prompt = _build_prompt(
         class_title=class_title, topic=topic, count=count, difficulty=difficulty
     )
 
     raw = ""
     try:
-        resp = model.generate_content(
-            prompt,
-            generation_config={
-                "temperature": 0.6,
-                "response_mime_type": "application/json",
-            },
+        resp = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.6,
+                response_mime_type="application/json",
+            ),
         )
         raw = resp.text or ""
         logger.info(
@@ -89,6 +109,18 @@ def generate_practice_questions(
         )
         raise PracticeGenerationError(
             "Model did not return valid questions JSON"
+        ) from e
+    except ResourceExhausted as e:
+        retry_after = _parse_retry_after_seconds(str(e))
+        logger.info("practice_rate_limited retry_after=%s", retry_after)
+        if retry_after is not None:
+            raise PracticeRateLimitError(
+                f"Rate limited by Gemini API. Please retry in {retry_after}s.",
+                retry_after_seconds=retry_after,
+            ) from e
+        raise PracticeRateLimitError(
+            "Rate limited by Gemini API. Please retry shortly.",
+            retry_after_seconds=None,
         ) from e
     except Exception as e:
         logger.exception("practice_generation_failed err=%s", e.__class__.__name__)

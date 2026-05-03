@@ -1,6 +1,13 @@
 .env
 .env.*
 
+# Terraform local variables (often contain secrets)
+terraform/terraform.tfvars
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/*.tfstate
+terraform/*.tfstate.backup
+
 # Python
 __pycache__/
 *.py[cod]
@@ -9,6 +16,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
 # Virtual environments
 .venv/

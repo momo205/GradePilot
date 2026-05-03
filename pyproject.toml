@@ -8,16 +8,22 @@ authors = [{ name = "GradePilot Team" }]
 
 dependencies = [
   "fastapi",
+  "python-multipart",
   "uvicorn[standard]",
   "pydantic",
   "httpx",
   "python-jose[cryptography]",
   "langchain",
   "langgraph",
-  "google-generativeai",
+  "google-genai",
+  "pypdf",
 
   "sqlalchemy",
   "psycopg[binary]",
+  "pgvector",
+
+  "google-auth-oauthlib",
+  "google-api-python-client",
 ]
 
 [project.optional-dependencies]

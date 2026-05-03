@@ -10,22 +10,21 @@ describe("GradePilot frontend", () => {
     expect(elements[0]).toBeInTheDocument();
   });
 
-  test("renders the upload hub section", () => {
+  test("renders the features section", () => {
     render(<Home />);
-    expect(screen.getByText(/upload hub/i)).toBeInTheDocument();
+    expect(screen.getByText(/everything you need to run your week/i)).toBeInTheDocument();
+    expect(screen.getByText(/syllabus parsing/i)).toBeInTheDocument();
   });
 
-  test("renders the live agent activity section", () => {
+  test("renders the how it works section", () => {
     render(<Home />);
-    expect(screen.getByText(/live agent activity/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/how it works/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/upload your syllabus or notes/i)).toBeInTheDocument();
   });
 
-  test("renders the study session button", () => {
+  test("renders the get started CTA", () => {
     render(<Home />);
-    // Since there are multiple "Start Study Session" buttons, we select all and verify array length > 0
-    const buttons = screen.getAllByRole("button", { name: /start study session/i });
-    expect(buttons.length).toBeGreaterThan(0);
-    expect(buttons[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/get started/i).length).toBeGreaterThan(0);
   });
 
 });
