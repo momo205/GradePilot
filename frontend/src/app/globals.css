@@ -3,15 +3,23 @@
 @tailwind utilities;
 
 :root {
-  --background: #0f172a;
-  --foreground: #f8fafc;
+  --background: #0a0a0a;
+  --surface: #141414;
+  --border: #2a2a2a;
+  --accent: #3b82f6;
+  --text: #f0f0f0;
+  --muted: #6b7280;
 }
 
 body {
-  color: var(--foreground);
+  color: var(--text);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
   /* overflow is managed per-page */
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 30%, transparent);
+  color: var(--text);
 }
 
 /* Custom Scrollbar for better appearance */
@@ -42,4 +50,55 @@ body {
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+@layer components {
+  .gp-container {
+    @apply mx-auto w-full max-w-6xl px-6;
+  }
+
+  .gp-page {
+    @apply min-h-screen w-full bg-background text-text;
+  }
+
+  .gp-card {
+    @apply rounded-xl border border-border bg-surface;
+  }
+
+  .gp-card-pad {
+    @apply gp-card p-4;
+  }
+
+  .gp-heading-1 {
+    @apply text-3xl md:text-4xl font-semibold tracking-tight;
+  }
+
+  .gp-heading-2 {
+    @apply text-base font-semibold tracking-tight;
+  }
+
+  .gp-muted {
+    @apply text-sm text-muted;
+  }
+
+  .gp-btn {
+    @apply inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-60;
+  }
+
+  .gp-btn-ghost {
+    @apply inline-flex items-center justify-center rounded-lg border border-border bg-transparent px-4 py-2 text-sm font-semibold text-text hover:bg-white/5 disabled:opacity-60;
+  }
+
+  .gp-link {
+    @apply text-sm text-muted hover:text-text transition-colors;
+  }
+
+  /* Avoid ring-* opacity modifiers with CSS-variable theme colors (breaks @apply). */
+  .gp-input {
+    @apply w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent;
+  }
+
+  .gp-textarea {
+    @apply w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent;
+  }
 }

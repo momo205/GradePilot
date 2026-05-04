@@ -19,15 +19,18 @@ def _make_mock_response(text: str) -> MagicMock:
     return resp
 
 
-def _mock_model(text: str) -> MagicMock:
-    model = MagicMock()
-    model.generate_content.return_value = _make_mock_response(text)
-    return model
+def _patch_genai(*, text: str | None = None, exc: Exception | None = None) -> Any:
+    """Patch `from google import genai` usage in services.
 
+    The services now call: `genai.Client(...).models.generate_content(...)`.
+    """
 
-def _patch_genai(model: MagicMock) -> Any:
     genai_mock = MagicMock()
-    genai_mock.GenerativeModel.return_value = model
+    client = genai_mock.Client.return_value
+    if exc is not None:
+        client.models.generate_content.side_effect = exc
+    else:
+        client.models.generate_content.return_value = _make_mock_response(text or "")
     return genai_mock
 
 
@@ -44,8 +47,7 @@ def test_practice_service_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = json.dumps(
         {"questions": [{"q": "What is O(n)?", "a": "Linear time complexity."}]}
     )
-    model = _mock_model(payload)
-    monkeypatch.setattr(svc, "genai", _patch_genai(model))
+    monkeypatch.setattr(svc, "genai", _patch_genai(text=payload))
     with patch("app.services.practice.get_settings", return_value=_mock_settings()):
         result = svc.generate_practice_questions(
             class_title="CS 101", topic="Big-O", count=1, difficulty="Easy"
@@ -61,8 +63,7 @@ def test_practice_service_list_response(monkeypatch: pytest.MonkeyPatch) -> None
     payload = json.dumps(
         [{"q": "Define recursion.", "a": "A function calling itself."}]
     )
-    model = _mock_model(payload)
-    monkeypatch.setattr(svc, "genai", _patch_genai(model))
+    monkeypatch.setattr(svc, "genai", _patch_genai(text=payload))
     with patch("app.services.practice.get_settings", return_value=_mock_settings()):
         result = svc.generate_practice_questions(
             class_title="CS 101", topic="Recursion", count=1, difficulty="Medium"
@@ -74,8 +75,7 @@ def test_practice_service_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.services.practice import PracticeGenerationError
     from app.services import practice as svc
 
-    model = _mock_model("not json at all")
-    monkeypatch.setattr(svc, "genai", _patch_genai(model))
+    monkeypatch.setattr(svc, "genai", _patch_genai(text="not json at all"))
     with patch("app.services.practice.get_settings", return_value=_mock_settings()):
         with pytest.raises(PracticeGenerationError, match="valid questions JSON"):
             svc.generate_practice_questions(
@@ -101,9 +101,7 @@ def test_practice_service_model_exception(monkeypatch: pytest.MonkeyPatch) -> No
     from app.services.practice import PracticeGenerationError
     from app.services import practice as svc
 
-    model = MagicMock()
-    model.generate_content.side_effect = RuntimeError("network error")
-    monkeypatch.setattr(svc, "genai", _patch_genai(model))
+    monkeypatch.setattr(svc, "genai", _patch_genai(exc=RuntimeError("network error")))
     with patch("app.services.practice.get_settings", return_value=_mock_settings()):
         with pytest.raises(PracticeGenerationError, match="RuntimeError"):
             svc.generate_practice_questions(
@@ -126,8 +124,7 @@ def test_study_plan_service_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
             "schedule": [{"day": "Day 1", "tasks": ["Read chapter 1"]}],
         }
     )
-    model = _mock_model(payload)
-    monkeypatch.setattr(svc, "genai", _patch_genai(model))
+    monkeypatch.setattr(svc, "genai", _patch_genai(text=payload))
     with patch("app.services.study_plan.get_settings", return_value=_mock_settings()):
         plan, model_name = svc.generate_study_plan(
             class_title="CS 101", notes_text="Sorting algorithms notes."
@@ -140,8 +137,7 @@ def test_study_plan_service_invalid_json(monkeypatch: pytest.MonkeyPatch) -> Non
     from app.services.study_plan import StudyPlanGenerationError
     from app.services import study_plan as svc
 
-    model = _mock_model("bad json")
-    monkeypatch.setattr(svc, "genai", _patch_genai(model))
+    monkeypatch.setattr(svc, "genai", _patch_genai(text="bad json"))
     with patch("app.services.study_plan.get_settings", return_value=_mock_settings()):
         with pytest.raises(StudyPlanGenerationError, match="valid study-plan JSON"):
             svc.generate_study_plan(class_title="CS 101", notes_text="notes")
@@ -161,9 +157,7 @@ def test_study_plan_service_model_exception(monkeypatch: pytest.MonkeyPatch) -> 
     from app.services.study_plan import StudyPlanGenerationError
     from app.services import study_plan as svc
 
-    model = MagicMock()
-    model.generate_content.side_effect = RuntimeError("timeout")
-    monkeypatch.setattr(svc, "genai", _patch_genai(model))
+    monkeypatch.setattr(svc, "genai", _patch_genai(exc=RuntimeError("timeout")))
     with patch("app.services.study_plan.get_settings", return_value=_mock_settings()):
         with pytest.raises(StudyPlanGenerationError, match="RuntimeError"):
             svc.generate_study_plan(class_title="CS 101", notes_text="notes")

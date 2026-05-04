@@ -47,6 +47,14 @@ uvicorn app.main:app --reload
 
 The API will be available at `http://127.0.0.1:8000` with the interactive docs at `http://127.0.0.1:8000/docs`.
 
+- **Database schema (Supabase / Postgres)**
+  - The backend uses SQLAlchemy models, but Supabase/Postgres schema is created via SQL scripts in `docs/db/`.
+  - Run these scripts once in the Supabase SQL editor (or against your local Postgres), in order:
+    - `docs/db/002_rag_documents.sql`
+    - `docs/db/003_google_integrations.sql`
+    - `docs/db/004_user_settings.sql`
+    - `docs/db/005_chat.sql`
+
 - **Run tests and checks**
 
 ```bash

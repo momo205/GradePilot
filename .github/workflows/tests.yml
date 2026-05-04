@@ -21,12 +21,11 @@ jobs:
 
       - name: Install backend dependencies
         run: |
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest pytest-cov
+          pip install -e ".[dev]"
 
       - name: Run backend tests
         run: |
-          pytest --maxfail=1 --disable-warnings --cov=. --cov-report=term || echo "No backend tests found yet"
+          pytest --maxfail=1 --disable-warnings --cov=app --cov-report=term
 
   frontend-tests:
     runs-on: ubuntu-latest
@@ -42,8 +41,10 @@ jobs:
 
       - name: Install frontend dependencies
         run: |
-          if [ -f package.json ]; then npm install; else echo "No package.json found yet"; fi
+          cd frontend
+          npm install
 
       - name: Run frontend tests
         run: |
-          if [ -f package.json ]; then npm test -- --watch=false --coverage || echo "No frontend tests found yet"; else echo "Skipping frontend tests"; fi
+          cd frontend
+          npm test -- --watch=false --coverage
