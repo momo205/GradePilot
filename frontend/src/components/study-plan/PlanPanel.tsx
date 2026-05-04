@@ -23,7 +23,7 @@ export function PlanPanel({
       {!hasNotes ? (
         <EmptyState
           title="No notes yet"
-          body="Save notes for this class to generate a study plan."
+          body="Save notes for this class before generating a study plan. Go to the Notes tab and add or upload your notes first."
         />
       ) : (
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-4">
