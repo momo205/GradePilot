@@ -135,6 +135,33 @@ def create_study_plan(
     return plan
 
 
+def update_study_plan_progress(
+    *,
+    db: Session,
+    user_id: uuid.UUID,
+    class_id: uuid.UUID,
+    plan_id: uuid.UUID,
+    completed_tasks: list[str],
+) -> StudyPlan | None:
+    stmt = select(StudyPlan).where(
+        StudyPlan.id == plan_id,
+        StudyPlan.class_id == class_id,
+        StudyPlan.user_id == user_id,
+    )
+    plan = db.execute(stmt).scalar_one_or_none()
+    if plan is None:
+        return None
+    
+    new_plan_json = dict(plan.plan_json)
+    new_plan_json["completed_tasks"] = completed_tasks
+    plan.plan_json = new_plan_json
+    
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return plan
+
+
 def list_deadlines(
     *, db: Session, user_id: uuid.UUID, class_id: uuid.UUID
 ) -> list[Deadline]:

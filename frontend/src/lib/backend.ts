@@ -137,6 +137,7 @@ export type StudyPlanOut = {
     title: string;
     goals: string[];
     schedule: { day: string; tasks: string[] }[];
+    completed_tasks?: string[];
   };
   model: string;
   created_at: string;
@@ -201,6 +202,13 @@ export function createSemesterStudyPlan(
 
 export function getLatestStudyPlan(classId: string) {
   return backendFetch<StudyPlanOut>(`/classes/${classId}/study-plan/latest`);
+}
+
+export function updateStudyPlanProgress(classId: string, planId: string, completed_tasks: string[]) {
+  return backendFetch<StudyPlanOut>(`/classes/${classId}/study-plan/${planId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ completed_tasks }),
+  });
 }
 
 export function listDeadlines(classId: string) {
