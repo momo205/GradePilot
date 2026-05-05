@@ -328,7 +328,7 @@ def update_study_plan_endpoint(
     clazz = crud.get_class(db=db, user_id=user_id, class_id=class_id)
     if clazz is None:
         raise HTTPException(status_code=404, detail="Class not found")
-        
+
     updated = crud.update_study_plan_progress(
         db=db,
         user_id=user_id,

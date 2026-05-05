@@ -151,11 +151,11 @@ def update_study_plan_progress(
     plan = db.execute(stmt).scalar_one_or_none()
     if plan is None:
         return None
-    
+
     new_plan_json = dict(plan.plan_json)
     new_plan_json["completed_tasks"] = completed_tasks
     plan.plan_json = new_plan_json
-    
+
     db.add(plan)
     db.commit()
     db.refresh(plan)
