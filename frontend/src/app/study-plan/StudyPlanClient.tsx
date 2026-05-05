@@ -14,6 +14,8 @@ import {
   listClasses,
   listDeadlines,
   summariseDocument,
+  updateDeadline,
+  updateStudyPlanProgress,
   uploadMaterialPdf,
   uploadMaterialText,
   type ClassAskOut,
@@ -368,6 +370,7 @@ export default function StudyPlanClient() {
                   id: d.id,
                   title: d.title,
                   due_text: d.due_text,
+                  completed_at: d.completed_at,
                 }))}
                 deadlineTitle={deadlineTitle}
                 deadlineDue={deadlineDue}
@@ -406,6 +409,17 @@ export default function StudyPlanClient() {
                     setLoading(false);
                   }
                 }}
+                onToggleDeadline={async (id, completed) => {
+                  if (!selectedClassId) return;
+                  try {
+                    const updated = await updateDeadline(selectedClassId, id, { completed });
+                    setDeadlines((prev) => 
+                      (prev ?? []).map(d => d.id === id ? updated : d)
+                    );
+                  } catch (e: unknown) {
+                    setError(e instanceof Error ? e.message : 'Failed to update deadline');
+                  }
+                }}
               />
 
               <PracticePanel
@@ -442,6 +456,30 @@ export default function StudyPlanClient() {
                 hasNotes={Boolean(notes && notes.length > 0)}
                 plan={plan}
                 loading={loading}
+                onToggleTask={async (taskText, completed) => {
+                  if (!selectedClassId || !plan) return;
+                  const currentCompleted = plan.plan_json.completed_tasks ?? [];
+                  let newCompleted: string[];
+                  if (completed) {
+                    newCompleted = [...currentCompleted, taskText];
+                  } else {
+                    newCompleted = currentCompleted.filter(t => t !== taskText);
+                  }
+                  
+                  // Optimistic update
+                  setPlan({
+                    ...plan,
+                    plan_json: { ...plan.plan_json, completed_tasks: newCompleted }
+                  });
+                  
+                  try {
+                    await updateStudyPlanProgress(selectedClassId, plan.id, newCompleted);
+                  } catch (e: unknown) {
+                    setError(e instanceof Error ? e.message : 'Failed to update progress');
+                    // revert optimistic update on fail
+                    setPlan(plan);
+                  }
+                }}
                 onGenerate={async () => {
                   if (!selectedClassId) return;
                   setLoading(true);

@@ -59,6 +59,10 @@ class StudyPlanCreate(BaseModel):
     notes_id: uuid.UUID | None = None
 
 
+class StudyPlanUpdate(BaseModel):
+    completed_tasks: list[str]
+
+
 class StudyPlanOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
