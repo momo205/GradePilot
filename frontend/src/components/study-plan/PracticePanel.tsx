@@ -51,7 +51,10 @@ export function PracticePanel({
               min={1}
               max={10}
               value={practiceCount}
-              onChange={(e) => onPracticeCountChange(Number(e.target.value))}
+              onChange={(e) => {
+                const val = Math.min(10, Math.max(1, Number(e.target.value)));
+                onPracticeCountChange(val);
+              }}
               className="bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/20"
             />
             <select
