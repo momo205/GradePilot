@@ -49,7 +49,7 @@ async function filesToText(files: File[]): Promise<{ filename: string; text: str
       parts.push(raw_text);
       continue;
     }
-    throw new Error('Only .txt, .md, and .pdf uploads are supported right now.');
+    throw new Error('Only .txt, .md, and .pdf uploads are supported. Please upload a supported file type.');
   }
   return { filename: files.map((f) => f.name).join(', '), text: parts.join('\n\n') };
 }
@@ -92,6 +92,7 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
   const classTitle = summary?.clazz?.title ?? 'Class';
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -111,13 +112,15 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
           setPlan(null);
         }
       } catch (e: unknown) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load class');
+        if (!cancelled && !controller.signal.aborted)
+          setError(e instanceof Error ? e.message : 'Failed to load class');
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [classId]);
 

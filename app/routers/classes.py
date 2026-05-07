@@ -25,6 +25,7 @@ from app.schemas import (
     StudyPlanCreate,
     StudyPlanOut,
     StudyPlanSemesterCreate,
+    StudyPlanUpdate,
 )
 from app.services.deadlines.extract import (
     DeadlineExtractError,
@@ -313,6 +314,31 @@ def get_latest_study_plan_endpoint(
     if plan is None:
         raise HTTPException(status_code=404, detail="No study plan found")
     return StudyPlanOut.model_validate(plan)
+
+
+@router.patch("/{class_id}/study-plan/{plan_id}", response_model=StudyPlanOut)
+def update_study_plan_endpoint(
+    class_id: uuid.UUID,
+    plan_id: uuid.UUID,
+    payload: StudyPlanUpdate,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StudyPlanOut:
+    user_id = _user_uuid(user)
+    clazz = crud.get_class(db=db, user_id=user_id, class_id=class_id)
+    if clazz is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    updated = crud.update_study_plan_progress(
+        db=db,
+        user_id=user_id,
+        class_id=class_id,
+        plan_id=plan_id,
+        completed_tasks=payload.completed_tasks,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Study plan not found")
+    return StudyPlanOut.model_validate(updated)
 
 
 @router.get("/{class_id}/deadlines", response_model=list[DeadlineOut])
