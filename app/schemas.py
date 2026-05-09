@@ -139,6 +139,8 @@ class StudyPlanAI(BaseModel):
 class PracticeQuestion(BaseModel):
     q: str
     a: str
+    # Which saved notes / lecture this question is grounded in (e.g. "Lecture 2").
+    source_label: str = Field(default="Class notes", min_length=1)
 
 
 class PracticeQuestionsAI(BaseModel):
@@ -146,7 +148,6 @@ class PracticeQuestionsAI(BaseModel):
 
 
 class PracticeGenerateRequest(BaseModel):
-    topic: str = Field(min_length=1, max_length=200)
     count: int = Field(default=5, ge=1, le=10)
     difficulty: Literal["Easy", "Medium", "Hard"] = "Medium"
 

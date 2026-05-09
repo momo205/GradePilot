@@ -43,6 +43,9 @@ from app.services.practice import (
     PracticeRateLimitError,
     generate_practice_questions,
 )
+
+# Per-lecture cap when building the practice prompt (avoids huge uploads).
+_PRACTICE_NOTE_MAX_CHARS = 8000
 from app.services.scheduling.anchors import compute_next_anchor
 from app.services.scheduling.plan_sessions import schedule_plan_day_sessions
 from app.services.study_plan import (
@@ -281,10 +284,24 @@ def generate_practice(
     clazz = crud.get_class(db=db, user_id=user_id, class_id=class_id)
     if clazz is None:
         raise HTTPException(status_code=404, detail="Class not found")
+    notes_list = crud.list_notes(db=db, user_id=user_id, class_id=class_id)
+    if not notes_list:
+        raise HTTPException(status_code=400, detail="No notes available for class")
+    notes_ordered = sorted(notes_list, key=lambda n: n.created_at)
+    segments: list[tuple[str, str]] = []
+    for i, n in enumerate(notes_ordered, start=1):
+        label = f"Lecture {i}"
+        text = n.notes_text
+        if len(text) > _PRACTICE_NOTE_MAX_CHARS:
+            text = (
+                text[:_PRACTICE_NOTE_MAX_CHARS]
+                + "\n\n[...truncated for question generation]"
+            )
+        segments.append((label, text))
     try:
         questions = generate_practice_questions(
             class_title=clazz.title,
-            topic=payload.topic,
+            note_segments=segments,
             count=payload.count,
             difficulty=payload.difficulty,
         )

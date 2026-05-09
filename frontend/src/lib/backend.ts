@@ -156,12 +156,12 @@ export type StudyPlanOut = {
   scheduled_plan_sessions?: ScheduledPlanSession[];
 };
 
-export type PracticeQuestion = { q: string; a: string };
+export type PracticeQuestion = { q: string; a: string; source_label?: string };
 
-export function generatePractice(classId: string, topic: string, count: number, difficulty: string) {
+export function generatePractice(classId: string, count: number, difficulty: string) {
   return backendFetch<{ questions: PracticeQuestion[] }>(`/classes/${classId}/practice`, {
     method: 'POST',
-    body: JSON.stringify({ topic, count, difficulty }),
+    body: JSON.stringify({ count, difficulty }),
   });
 }
 

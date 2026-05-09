@@ -82,7 +82,6 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
   const [deadlineTitle, setDeadlineTitle] = useState('');
   const [deadlineDue, setDeadlineDue] = useState('');
 
-  const [practiceTopic, setPracticeTopic] = useState('');
   const [practiceCount, setPracticeCount] = useState(5);
   const [practiceDifficulty, setPracticeDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>(
     'Medium'
@@ -1004,10 +1003,9 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
       {tab === 'practice' ? (
         <PracticePanel
           hasNotes={Boolean(notes && notes.length > 0)}
-          practiceTopic={practiceTopic}
+          lectureCount={notes?.length ?? 0}
           practiceCount={practiceCount}
           practiceDifficulty={practiceDifficulty}
-          onPracticeTopicChange={setPracticeTopic}
           onPracticeCountChange={setPracticeCount}
           onPracticeDifficultyChange={setPracticeDifficulty}
           loading={loading}
@@ -1016,7 +1014,7 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
             setLoading(true);
             setError(null);
             try {
-              const res = await generatePractice(classId, practiceTopic.trim(), practiceCount, practiceDifficulty);
+              const res = await generatePractice(classId, practiceCount, practiceDifficulty);
               setPractice(res.questions);
             } catch (e: unknown) {
               setError(e instanceof Error ? e.message : 'Failed to generate practice');

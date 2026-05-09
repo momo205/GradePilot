@@ -50,7 +50,10 @@ def test_practice_service_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(svc, "genai", _patch_genai(text=payload))
     with patch("app.services.practice.get_settings", return_value=_mock_settings()):
         result = svc.generate_practice_questions(
-            class_title="CS 101", topic="Big-O", count=1, difficulty="Easy"
+            class_title="CS 101",
+            note_segments=[("Lecture 1", "Big-O notation and complexity.")],
+            count=1,
+            difficulty="Easy",
         )
     assert len(result) == 1
     assert result[0].q == "What is O(n)?"
@@ -61,14 +64,24 @@ def test_practice_service_list_response(monkeypatch: pytest.MonkeyPatch) -> None
     from app.services import practice as svc
 
     payload = json.dumps(
-        [{"q": "Define recursion.", "a": "A function calling itself."}]
+        [
+            {
+                "q": "Define recursion.",
+                "a": "A function calling itself.",
+                "source_label": "Lecture 1",
+            }
+        ]
     )
     monkeypatch.setattr(svc, "genai", _patch_genai(text=payload))
     with patch("app.services.practice.get_settings", return_value=_mock_settings()):
         result = svc.generate_practice_questions(
-            class_title="CS 101", topic="Recursion", count=1, difficulty="Medium"
+            class_title="CS 101",
+            note_segments=[("Lecture 1", "Recursion and base cases.")],
+            count=1,
+            difficulty="Medium",
         )
     assert result[0].q == "Define recursion."
+    assert result[0].source_label == "Lecture 1"
 
 
 def test_practice_service_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -79,7 +92,10 @@ def test_practice_service_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
     with patch("app.services.practice.get_settings", return_value=_mock_settings()):
         with pytest.raises(PracticeGenerationError, match="valid questions JSON"):
             svc.generate_practice_questions(
-                class_title="CS 101", topic="X", count=1, difficulty="Hard"
+                class_title="CS 101",
+                note_segments=[("Lecture 1", "x")],
+                count=1,
+                difficulty="Hard",
             )
 
 
@@ -93,7 +109,10 @@ def test_practice_service_no_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
         mock_settings.return_value = MagicMock(google_api_key=None)
         with pytest.raises(PracticeGenerationError, match="GOOGLE_API_KEY"):
             svc.generate_practice_questions(
-                class_title="CS 101", topic="X", count=1, difficulty="Easy"
+                class_title="CS 101",
+                note_segments=[("Lecture 1", "x")],
+                count=1,
+                difficulty="Easy",
             )
 
 
@@ -105,7 +124,10 @@ def test_practice_service_model_exception(monkeypatch: pytest.MonkeyPatch) -> No
     with patch("app.services.practice.get_settings", return_value=_mock_settings()):
         with pytest.raises(PracticeGenerationError, match="RuntimeError"):
             svc.generate_practice_questions(
-                class_title="CS 101", topic="X", count=1, difficulty="Easy"
+                class_title="CS 101",
+                note_segments=[("Lecture 1", "x")],
+                count=1,
+                difficulty="Easy",
             )
 
 

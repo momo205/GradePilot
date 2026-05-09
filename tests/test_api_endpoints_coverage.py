@@ -303,7 +303,7 @@ def test_classes_notes_deadlines_and_plans_endpoints(
 
     r = client.post(
         f"/classes/{class_id}/practice",
-        json={"topic": "SQL", "count": 1, "difficulty": "Easy"},
+        json={"count": 1, "difficulty": "Easy"},
     )
     assert r.status_code == 200
     assert len(r.json()["questions"]) == 1

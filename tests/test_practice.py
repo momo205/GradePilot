@@ -59,19 +59,31 @@ def test_generate_practice_ok(
     practice_client: tuple[TestClient, str], monkeypatch: MonkeyPatch
 ) -> None:
     client, class_id = practice_client
+    n = client.post(
+        f"/classes/{class_id}/notes",
+        json={"notes_text": "Lists are ordered sequences."},
+    )
+    assert n.status_code == 200
     monkeypatch.setattr(
         "app.routers.classes.generate_practice_questions",
-        lambda **_: [PracticeQuestion(q="What is a list?", a="An ordered sequence.")],
+        lambda **_: [
+            PracticeQuestion(
+                q="What is a list?",
+                a="An ordered sequence.",
+                source_label="Lecture 1",
+            )
+        ],
     )
     resp = client.post(
         f"/classes/{class_id}/practice",
-        json={"topic": "Data Structures", "count": 1, "difficulty": "Easy"},
+        json={"count": 1, "difficulty": "Easy"},
     )
     assert resp.status_code == 200
     body = resp.json()
     assert len(body["questions"]) == 1
     assert body["questions"][0]["q"] == "What is a list?"
     assert body["questions"][0]["a"] == "An ordered sequence."
+    assert body["questions"][0]["source_label"] == "Lecture 1"
 
 
 def test_generate_practice_class_not_found(
@@ -84,7 +96,7 @@ def test_generate_practice_class_not_found(
     )
     resp = client.post(
         f"/classes/{uuid.uuid4()}/practice",
-        json={"topic": "Graphs", "count": 3, "difficulty": "Hard"},
+        json={"count": 3, "difficulty": "Hard"},
     )
     assert resp.status_code == 404
 
@@ -95,6 +107,11 @@ def test_generate_practice_ai_error(
     from app.services.practice import PracticeGenerationError
 
     client, class_id = practice_client
+    n = client.post(
+        f"/classes/{class_id}/notes",
+        json={"notes_text": "Binary trees."},
+    )
+    assert n.status_code == 200
 
     def _fail(**_: object) -> list[PracticeQuestion]:
         raise PracticeGenerationError("Model unavailable")
@@ -102,18 +119,35 @@ def test_generate_practice_ai_error(
     monkeypatch.setattr("app.routers.classes.generate_practice_questions", _fail)
     resp = client.post(
         f"/classes/{class_id}/practice",
-        json={"topic": "Trees", "count": 5, "difficulty": "Medium"},
+        json={"count": 5, "difficulty": "Medium"},
     )
     assert resp.status_code == 502
     assert "Model unavailable" in resp.json()["detail"]
+
+
+def test_generate_practice_no_notes(
+    practice_client: tuple[TestClient, str],
+) -> None:
+    client, class_id = practice_client
+    resp = client.post(
+        f"/classes/{class_id}/practice",
+        json={"count": 3, "difficulty": "Easy"},
+    )
+    assert resp.status_code == 400
+    assert "notes" in resp.json()["detail"].lower()
 
 
 def test_generate_practice_invalid_difficulty(
     practice_client: tuple[TestClient, str],
 ) -> None:
     client, class_id = practice_client
+    n = client.post(
+        f"/classes/{class_id}/notes",
+        json={"notes_text": "Sorting algorithms."},
+    )
+    assert n.status_code == 200
     resp = client.post(
         f"/classes/{class_id}/practice",
-        json={"topic": "Sorting", "count": 3, "difficulty": "banana"},
+        json={"count": 3, "difficulty": "banana"},
     )
     assert resp.status_code == 422

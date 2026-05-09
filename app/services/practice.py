@@ -38,24 +38,50 @@ def _parse_retry_after_seconds(msg: str) -> int | None:
         return None
 
 
-def _build_prompt(*, class_title: str, topic: str, count: int, difficulty: str) -> str:
+def _format_note_segments(note_segments: list[tuple[str, str]]) -> str:
+    parts: list[str] = []
+    for label, text in note_segments:
+        parts.append(f"### {label}\n{text.strip()}")
+    return "\n\n".join(parts)
+
+
+def _build_prompt_from_notes(
+    *,
+    class_title: str,
+    note_segments: list[tuple[str, str]],
+    count: int,
+    difficulty: str,
+) -> str:
+    labels = [lbl for lbl, _ in note_segments]
+    labels_csv = ", ".join(f'"{lbl}"' for lbl in labels)
+    material = _format_note_segments(note_segments)
     return f"""You are an expert computer science professor and study coach.
 
-Generate exactly {count} practice questions for the topic "{topic}" in the course "{class_title}".
+Course: "{class_title}"
+
+Below are the student's saved lecture notes. Each section is labeled (e.g. Lecture 1, Lecture 2).
+Notes may be incomplete; only ask about concepts that appear in the notes.
+
+--- BEGIN NOTES ---
+{material}
+--- END NOTES ---
+
+Generate exactly {count} practice questions using ONLY the notes above.
 Difficulty level: {difficulty}
 
 Rules:
-- Questions must be specific, relevant, and academically rigorous for a CS course.
+- Every question must be answerable from exactly one labeled section. Set "source_label" to that section's label, and it MUST be one of: {labels_csv}
+- Spread questions across sections when there are multiple lectures (roughly proportional to how much material each section has). If there is only one section, all questions come from it.
 - Easy: definitions, basic concepts, simple recall.
 - Medium: application, comparison, explain how/why.
 - Hard: analysis, tradeoffs, complex problem-solving, edge cases.
-- Answers must be clear, concise, and correct.
+- Answers must be clear, concise, and correct from the notes.
 - Return ONLY valid JSON, no markdown, no extra text.
 
 Return JSON matching this exact schema:
 {{
   "questions": [
-    {{"q": "question text", "a": "answer text"}},
+    {{"q": "question text", "a": "answer text", "source_label": "Lecture 1"}},
     ...
   ]
 }}
@@ -65,16 +91,25 @@ Generate exactly {count} questions.
 
 
 def generate_practice_questions(
-    *, class_title: str, topic: str, count: int, difficulty: str
+    *,
+    class_title: str,
+    note_segments: list[tuple[str, str]],
+    count: int,
+    difficulty: str,
 ) -> list[PracticeQuestion]:
+    if not note_segments:
+        raise PracticeGenerationError("No note content to generate questions from")
     settings = get_settings()
     if not settings.google_api_key:
         raise PracticeGenerationError("GOOGLE_API_KEY is not configured")
 
     client = genai.Client(api_key=settings.google_api_key)
     model_name = settings.google_model
-    prompt = _build_prompt(
-        class_title=class_title, topic=topic, count=count, difficulty=difficulty
+    prompt = _build_prompt_from_notes(
+        class_title=class_title,
+        note_segments=note_segments,
+        count=count,
+        difficulty=difficulty,
     )
 
     raw = ""
