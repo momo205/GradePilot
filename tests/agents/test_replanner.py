@@ -17,7 +17,7 @@ from app.deps.auth import CurrentUser, get_current_user
 from app.main import app
 
 
-class ReplannerTestClient(TestClient):  # type: ignore[misc]
+class ReplannerTestClient(TestClient):
     """TestClient with session factory and user id attached for replanner API tests."""
 
     SessionLocal: sessionmaker[Session]

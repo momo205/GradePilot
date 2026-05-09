@@ -17,14 +17,16 @@ from app.agents.replanner.nodes import (
 from app.agents.replanner.state import ReplannerState
 from app.core.config import get_settings
 
+_PostgresSaver: type[Any] | None = None
+_HAS_POSTGRES_CHECKPOINTER = False
 try:
     # Provided by `langgraph-checkpoint-postgres`.
-    from langgraph.checkpoint.postgres import PostgresSaver as _PostgresSaver
+    from langgraph.checkpoint.postgres import PostgresSaver as _ImportedPostgresSaver
 
+    _PostgresSaver = _ImportedPostgresSaver
     _HAS_POSTGRES_CHECKPOINTER = True
 except Exception:  # pragma: no cover
-    _PostgresSaver = None
-    _HAS_POSTGRES_CHECKPOINTER = False
+    pass
 
 
 def _should_use_postgres_checkpointer(conn_str: str) -> bool:
