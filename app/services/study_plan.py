@@ -39,10 +39,18 @@ def _parse_retry_after_seconds(msg: str) -> int | None:
         return None
 
 
-def _build_prompt(*, class_title: str, notes_text: str) -> str:
+def _build_prompt(
+    *,
+    class_title: str,
+    notes_text: str,
+    horizon_days: int,
+    horizon_reason: str,
+) -> str:
     return f"""You are an expert study coach.
 
-Create a practical study plan for the course "{class_title}" based on the student's notes.
+Create a practical study plan for the course "{class_title}" based on the
+student's notes. The plan must cover EXACTLY the next {horizon_days} day(s),
+because that is how long the student has until {horizon_reason}.
 
 Return ONLY valid JSON matching this schema:
 {{
@@ -52,8 +60,13 @@ Return ONLY valid JSON matching this schema:
 }}
 
 Constraints:
-- Keep tasks concrete and actionable.
-- Include 7-14 days in schedule depending on content density.
+- The "schedule" array MUST contain exactly {horizon_days} item(s), one per
+  calendar day starting today. Use the "day" field for human-readable labels
+  like "Day 1 (Mon, May 11)" or just "Day 1".
+- Distribute the notes' content evenly across those {horizon_days} day(s);
+  do NOT pad with filler tasks if the horizon is short.
+- Keep tasks concrete, specific to the notes, and actionable in a single
+  study session.
 - No markdown, no extra text outside JSON.
 
 Student notes:
@@ -62,7 +75,11 @@ Student notes:
 
 
 def generate_study_plan(
-    *, class_title: str, notes_text: str
+    *,
+    class_title: str,
+    notes_text: str,
+    horizon_days: int = 14,
+    horizon_reason: str = "the next checkpoint",
 ) -> tuple[dict[str, Any], str]:
     settings = get_settings()
     if settings.google_api_key is None or settings.google_api_key == "":
@@ -70,7 +87,13 @@ def generate_study_plan(
 
     client = genai.Client(api_key=settings.google_api_key)
     model_name = settings.google_model
-    prompt = _build_prompt(class_title=class_title, notes_text=notes_text)
+    horizon = max(1, min(int(horizon_days), 14))
+    prompt = _build_prompt(
+        class_title=class_title,
+        notes_text=notes_text,
+        horizon_days=horizon,
+        horizon_reason=horizon_reason,
+    )
 
     try:
         resp = client.models.generate_content(

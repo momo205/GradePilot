@@ -88,6 +88,17 @@ export async function backendFetch<T>(
   return body as T;
 }
 
+export type MeetingPattern = {
+  weekdays: number[];
+  start_time: string;
+  end_time: string;
+};
+
+export type PreferredStudyWindow = {
+  start: string;
+  end: string;
+};
+
 export type ClassOut = {
   id: string;
   user_id: string;
@@ -96,6 +107,7 @@ export type ClassOut = {
   semester_end?: string | null;
   timezone?: string | null;
   availability_json?: Record<string, unknown> | null;
+  meeting_pattern?: MeetingPattern | null;
   created_at: string;
 };
 
@@ -141,6 +153,7 @@ export type StudyPlanOut = {
   };
   model: string;
   created_at: string;
+  scheduled_plan_sessions?: ScheduledPlanSession[];
 };
 
 export type PracticeQuestion = { q: string; a: string };
@@ -297,6 +310,7 @@ export function syncClassToGoogleCalendar(classId: string) {
 
 export type GoogleCalendarInfoOut = {
   calendar_id: string;
+  primary_calendar_id?: string | null;
 };
 
 export function getGoogleCalendarInfo() {
@@ -323,6 +337,8 @@ export type UserSettingsOut = {
   daysBeforeDeadline: number;
   googleConnected: boolean;
   timezone: string | null;
+  preferredStudyWindows: PreferredStudyWindow[];
+  autoScheduleSessions: boolean;
 };
 
 export function getUserSettings() {
@@ -333,6 +349,88 @@ export function updateUserSettings(payload: Partial<UserSettingsOut>) {
   return backendFetch<UserSettingsOut>('/settings', {
     method: 'PUT',
     body: JSON.stringify(payload),
+  });
+}
+
+export type ClassTimelineUpdatePayload = {
+  semester_start?: string | null;
+  semester_end?: string | null;
+  timezone?: string | null;
+  availability?:
+    | { day: string; start_time: string; end_time: string }[]
+    | null;
+  meeting_pattern?: MeetingPattern | null;
+};
+
+export function updateClassTimeline(
+  classId: string,
+  payload: ClassTimelineUpdatePayload
+) {
+  return backendFetch<ClassOut>(`/classes/${classId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export type ScheduledSession = {
+  start: string;
+  end: string;
+  in_preferred_window: boolean;
+  calendar_event_link: string;
+  calendar_event_id: string;
+  anchor_kind: 'next_lecture' | 'next_deadline' | 'fallback';
+};
+
+export type ScheduledPlanSession = {
+  day_index: number;
+  day_label: string;
+  tasks: string[];
+  start: string;
+  end: string;
+  in_preferred_window: boolean;
+  calendar_event_link: string;
+  calendar_event_id: string;
+};
+
+export type ReplannerOut = {
+  should_replan: boolean | null;
+  replan_reason: string | null;
+  change_signals: Record<string, unknown> | null;
+  new_plan_id: string | null;
+  new_plan: Record<string, unknown> | null;
+  calendar_sync_result: Record<string, unknown> | null;
+  scheduled_session: ScheduledSession | null;
+  scheduled_plan_sessions: ScheduledPlanSession[];
+  errors: string[];
+};
+
+export type ReplannerTrigger =
+  | 'onboarding'
+  | 'deadline_imported'
+  | 'deadline_added'
+  | 'notes_added'
+  | 'progress_updated'
+  | 'manual_replan';
+
+export function runReplanner(
+  classId: string,
+  payload: {
+    trigger: ReplannerTrigger;
+    dry_run?: boolean;
+    force_replan?: boolean;
+    sync_calendar_override?: boolean | null;
+    force_schedule_session?: boolean;
+  }
+) {
+  return backendFetch<ReplannerOut>(`/classes/${classId}/replan`, {
+    method: 'POST',
+    body: JSON.stringify({
+      dry_run: false,
+      force_replan: false,
+      sync_calendar_override: null,
+      force_schedule_session: false,
+      ...payload,
+    }),
   });
 }
 

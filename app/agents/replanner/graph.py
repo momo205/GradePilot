@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Any, Literal, Optional, TypedDict, cast
+from typing import Any, Literal, NotRequired, Optional, TypedDict, cast
 
 from langgraph.graph import END, START, StateGraph
 
@@ -11,14 +11,15 @@ from app.agents.replanner.nodes import (
     generate_plan,
     load_context,
     persist_plan,
+    schedule_plan_sessions,
+    schedule_study_session,
     should_replan_gate,
     sync_calendar,
 )
 from app.agents.replanner.state import ReplannerState
 from app.core.config import get_settings
 
-_PostgresSaver: type[Any] | None = None
-_HAS_POSTGRES_CHECKPOINTER = False
+_PostgresSaver: Any = None
 try:
     # Provided by `langgraph-checkpoint-postgres`.
     from langgraph.checkpoint.postgres import PostgresSaver as _ImportedPostgresSaver
@@ -26,7 +27,7 @@ try:
     _PostgresSaver = _ImportedPostgresSaver
     _HAS_POSTGRES_CHECKPOINTER = True
 except Exception:  # pragma: no cover
-    pass
+    _HAS_POSTGRES_CHECKPOINTER = False
 
 
 def _should_use_postgres_checkpointer(conn_str: str) -> bool:
@@ -56,6 +57,7 @@ class ReplannerInput(TypedDict):
     dry_run: bool
     force_replan: bool
     sync_calendar_override: Optional[bool]
+    force_schedule_session: NotRequired[bool]
 
 
 def should_sync_calendar(state: ReplannerState) -> bool:
@@ -78,6 +80,8 @@ def build_graph(*, checkpointer: Any | None = None) -> Any:
     graph.add_node("should_replan_gate", should_replan_gate)
     graph.add_node("generate_plan", generate_plan)
     graph.add_node("persist_plan", persist_plan)
+    graph.add_node("schedule_plan_sessions", schedule_plan_sessions)
+    graph.add_node("schedule_study_session", schedule_study_session)
     graph.add_node("sync_calendar", sync_calendar)
     graph.add_node("finalize", finalize)
 
@@ -85,20 +89,55 @@ def build_graph(*, checkpointer: Any | None = None) -> Any:
     graph.add_edge("load_context", "should_replan_gate")
 
     def _replan_branch(s: ReplannerState) -> str:
-        return "replan" if s.get("should_replan") else "skip"
+        if s.get("should_replan"):
+            return "replan"
+        # Even when nothing changed enough to warrant a new plan, a manual
+        # "Schedule now" click should still try to book a study session.
+        if s.get("force_schedule_session", False):
+            return "schedule_only"
+        return "skip"
 
     graph.add_conditional_edges(
         "should_replan_gate",
         _replan_branch,
-        {"skip": "finalize", "replan": "generate_plan"},
+        {
+            "skip": "finalize",
+            "replan": "generate_plan",
+            "schedule_only": "schedule_study_session",
+        },
     )
     graph.add_edge("generate_plan", "persist_plan")
 
+    # Calendar-sync gate (unchanged; intentionally still keyed off the legacy
+    # auto_sync_calendar / sync_calendar_override path). Reused after both
+    # persist_plan and schedule_study_session.
     def _sync_branch(s: ReplannerState) -> str:
         return "sync" if should_sync_calendar(s) else "nosync"
 
+    # After persist_plan, route through scheduling whenever notes_added (or any
+    # manual force-schedule request) brought us here. The flow is now
+    # persist_plan -> schedule_plan_sessions -> schedule_study_session ->
+    # sync_calendar gate, so the user gets:
+    #   * one calendar block per day in the new plan (plan-day sessions), and
+    #   * a single focused-study session anchored to the next lecture.
+    # Other triggers (deadline_added, etc.) keep the original sync-only path.
+    def _post_persist_branch(s: ReplannerState) -> str:
+        if s.get("trigger") == "notes_added" or s.get("force_schedule_session", False):
+            return "schedule"
+        return _sync_branch(s)
+
     graph.add_conditional_edges(
         "persist_plan",
+        _post_persist_branch,
+        {
+            "schedule": "schedule_plan_sessions",
+            "sync": "sync_calendar",
+            "nosync": "finalize",
+        },
+    )
+    graph.add_edge("schedule_plan_sessions", "schedule_study_session")
+    graph.add_conditional_edges(
+        "schedule_study_session",
         _sync_branch,
         {"sync": "sync_calendar", "nosync": "finalize"},
     )
@@ -122,6 +161,7 @@ def _run_replanner_sync(inp: ReplannerInput, thread_id: str | None) -> Replanner
         "dry_run": bool(inp.get("dry_run", False)),
         "force_replan": bool(inp.get("force_replan", False)),
         "sync_calendar_override": inp.get("sync_calendar_override"),
+        "force_schedule_session": bool(inp.get("force_schedule_session", False)),
         "class_data": None,
         "deadlines": None,
         "latest_plan": None,
@@ -135,6 +175,8 @@ def _run_replanner_sync(inp: ReplannerInput, thread_id: str | None) -> Replanner
         "new_plan_id": None,
         "calendar_sync_result": None,
         "completed_tasks_carried": None,
+        "scheduled_session": None,
+        "scheduled_plan_sessions": None,
         "errors": [],
     }
 

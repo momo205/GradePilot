@@ -39,6 +39,14 @@ class Class(Base):
         JSONB().with_variant(JSON(), "sqlite"),
         nullable=True,
     )
+    # Recurring lecture/meeting pattern in the class timezone. Shape:
+    #   {"weekdays": [0, 2], "start_time": "14:00", "end_time": "15:30"}
+    # weekdays: list[int] where 0=Monday ... 6=Sunday.
+    meeting_pattern: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=True,
+        default=None,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -346,6 +354,16 @@ class UserSettings(Base):
         Integer, nullable=False, default=3
     )
     timezone: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    # Preferred study windows in user local time. Shape:
+    #   [{"start": "07:00", "end": "10:00"}, ...]
+    preferred_study_windows: Mapped[list[dict[str, str]]] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=False,
+        default=list,
+    )
+    auto_schedule_sessions: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

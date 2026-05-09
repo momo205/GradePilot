@@ -40,6 +40,10 @@ class ReplanRequest(BaseModel):
     dry_run: bool = False
     force_replan: bool = False
     sync_calendar_override: bool | None = None
+    # When True, run schedule_study_session even if the user has not opted in
+    # via auto_schedule_sessions and even if the trigger is not notes_added.
+    # Used by the dashboard "Schedule study session now" button.
+    force_schedule_session: bool = False
 
 
 @router.post("/{class_id}/replan")
@@ -63,6 +67,7 @@ async def replan_class(
         "dry_run": payload.dry_run,
         "force_replan": payload.force_replan,
         "sync_calendar_override": payload.sync_calendar_override,
+        "force_schedule_session": payload.force_schedule_session,
     }
 
     try:
@@ -78,5 +83,7 @@ async def replan_class(
         "new_plan_id": out.get("new_plan_id"),
         "new_plan": out.get("new_plan"),
         "calendar_sync_result": out.get("calendar_sync_result"),
+        "scheduled_session": out.get("scheduled_session"),
+        "scheduled_plan_sessions": out.get("scheduled_plan_sessions") or [],
         "errors": out.get("errors", []),
     }

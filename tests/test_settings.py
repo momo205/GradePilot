@@ -43,14 +43,61 @@ def test_settings_defaults_and_update() -> None:
 
     r1 = client.get("/settings")
     assert r1.status_code == 200
-    assert r1.json()["notificationsEnabled"] is True
-    assert r1.json()["daysBeforeDeadline"] == 3
+    body = r1.json()
+    assert body["notificationsEnabled"] is True
+    assert body["daysBeforeDeadline"] == 3
+    assert body["preferredStudyWindows"] == []
+    assert body["autoScheduleSessions"] is False
 
     r2 = client.put(
-        "/settings", json={"notificationsEnabled": False, "daysBeforeDeadline": 7}
+        "/settings",
+        json={
+            "notificationsEnabled": False,
+            "daysBeforeDeadline": 7,
+            "preferredStudyWindows": [
+                {"start": "07:00", "end": "10:00"},
+                {"start": "19:00", "end": "23:00"},
+            ],
+            "autoScheduleSessions": True,
+        },
     )
     assert r2.status_code == 200
-    assert r2.json()["notificationsEnabled"] is False
-    assert r2.json()["daysBeforeDeadline"] == 7
+    body2 = r2.json()
+    assert body2["notificationsEnabled"] is False
+    assert body2["daysBeforeDeadline"] == 7
+    assert body2["preferredStudyWindows"] == [
+        {"start": "07:00", "end": "10:00"},
+        {"start": "19:00", "end": "23:00"},
+    ]
+    assert body2["autoScheduleSessions"] is True
+
+    # Validation: max 4 windows.
+    r3 = client.put(
+        "/settings",
+        json={
+            "preferredStudyWindows": [
+                {"start": "06:00", "end": "07:00"},
+                {"start": "08:00", "end": "09:00"},
+                {"start": "10:00", "end": "11:00"},
+                {"start": "12:00", "end": "13:00"},
+                {"start": "14:00", "end": "15:00"},
+            ],
+        },
+    )
+    assert r3.status_code == 422
+
+    # Validation: start >= end is rejected.
+    r4 = client.put(
+        "/settings",
+        json={"preferredStudyWindows": [{"start": "10:00", "end": "09:00"}]},
+    )
+    assert r4.status_code == 422
+
+    # Validation: bad HH:MM format is rejected.
+    r5 = client.put(
+        "/settings",
+        json={"preferredStudyWindows": [{"start": "7:00", "end": "10:00"}]},
+    )
+    assert r5.status_code == 422
 
     app.dependency_overrides.clear()

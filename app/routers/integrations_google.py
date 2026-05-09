@@ -14,15 +14,14 @@ from app.db.session import get_db
 from app.deps.auth import CurrentUser, get_current_user
 from app.schemas import DeadlineImportOut
 from app.services.google_calendar import (
+    SCOPES,
     build_google_credentials_for_calendar,
     get_or_create_gradepilot_calendar,
+    get_primary_calendar_id,
     upsert_deadline_event,
 )
 
 router = APIRouter(prefix="/integrations/google", tags=["integrations"])
-
-
-SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 # In-memory store for PKCE verifier keyed by OAuth state.
 # Keeps the auth flow working without adding persistence/migrations.
@@ -238,11 +237,16 @@ def sync_class_to_google_calendar(
 def get_gradepilot_calendar_info(
     user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     """
-    Returns the GradePilot calendar id for the current user.
+    Returns calendar ids for embedding in the frontend.
 
-    Intended for embedding the calendar in the frontend.
+    - ``calendar_id``: the GradePilot calendar (where deadlines and study
+      sessions are written).
+    - ``primary_calendar_id``: the user's primary Google calendar id (their
+      account email). Used to overlay personal events in the embedded view so
+      users can see how the GradePilot bookings sit alongside their own
+      schedule. May be ``None`` if the API call fails.
     """
     user_id = _user_uuid(user)
     settings = get_settings()
@@ -260,4 +264,5 @@ def get_gradepilot_calendar_info(
         refresh_token=integ.refresh_token,
     )
     calendar_id = get_or_create_gradepilot_calendar(creds=creds)
-    return {"calendar_id": calendar_id}
+    primary_id = get_primary_calendar_id(creds=creds)
+    return {"calendar_id": calendar_id, "primary_calendar_id": primary_id}

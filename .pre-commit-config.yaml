@@ -19,6 +19,7 @@ repos:
           - pydantic
           - sqlalchemy
           - types-python-dateutil
+          # So `fastapi.testclient.TestClient` is not treated as `Any` (subclass error).
           - fastapi
           - httpx
         args: []
