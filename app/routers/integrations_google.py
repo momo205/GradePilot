@@ -91,10 +91,18 @@ def google_oauth_start(
     )
     # Store PKCE verifier so the callback can exchange the code.
     code_verifier = getattr(flow, "code_verifier", None)
-    if isinstance(_state, str) and isinstance(code_verifier, str) and code_verifier != "":
+    if (
+        isinstance(_state, str)
+        and isinstance(code_verifier, str)
+        and code_verifier != ""
+    ):
         _oauth_store_put(state=_state, code_verifier=code_verifier)
     # Also return state+verifier so the frontend can keep it (more reliable than server memory).
-    if not isinstance(_state, str) or not isinstance(code_verifier, str) or code_verifier == "":
+    if (
+        not isinstance(_state, str)
+        or not isinstance(code_verifier, str)
+        or code_verifier == ""
+    ):
         return {"authorization_url": auth_url}
     return {
         "authorization_url": auth_url,

@@ -43,4 +43,3 @@ def parse_user_due_to_datetime(*, due: str, timezone: str | None) -> datetime | 
     except Exception:
         return None
     return datetime.combine(day, time(23, 59, 0), tzinfo=tz)
-
