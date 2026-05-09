@@ -29,6 +29,7 @@ from app.schemas import (
     StudyPlanSemesterCreate,
     StudyPlanUpdate,
 )
+from app.services.datetime_parse import parse_user_due_to_datetime
 from app.services.deadlines.extract import (
     DeadlineExtractError,
     DeadlineExtractRateLimitError,
@@ -397,12 +398,14 @@ async def create_deadline_endpoint(
     clazz = crud.get_class(db=db, user_id=user_id, class_id=class_id)
     if clazz is None:
         raise HTTPException(status_code=404, detail="Class not found")
+    due_at = parse_user_due_to_datetime(due=payload.due, timezone=clazz.timezone)
     created = crud.create_deadline(
         db=db,
         user_id=user_id,
         class_id=class_id,
         title=payload.title,
         due_text=payload.due,
+        due_at=due_at,
     )
     await _fire_replanner_after_write(
         user=user, class_id=class_id, trigger="deadline_added"

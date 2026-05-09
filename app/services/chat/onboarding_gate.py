@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
+from zoneinfo import ZoneInfo
 
 WELCOME_MESSAGE = """Welcome to GradePilot.
 
@@ -57,6 +59,21 @@ def _parse_semester_fields(message: str) -> dict[str, str]:
     return result
 
 
+_RE_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _is_valid_timezone(tz: str) -> bool:
+    try:
+        ZoneInfo(tz)
+        return True
+    except Exception:
+        return False
+
+
+def _is_valid_date(d: str) -> bool:
+    return bool(_RE_DATE.match(d))
+
+
 def _phase_as_int(value: Any) -> int:
     if isinstance(value, int):
         return value
@@ -97,7 +114,14 @@ def run_onboarding_gate(
     timezone_val = fields.get("timezone")
     sem_start = fields.get("semester_start")
     sem_end = fields.get("semester_end")
-    if timezone_val and sem_start and sem_end:
+    if (
+        timezone_val
+        and sem_start
+        and sem_end
+        and _is_valid_timezone(timezone_val)
+        and _is_valid_date(sem_start)
+        and _is_valid_date(sem_end)
+    ):
         st["timezone"] = timezone_val
         st["semester_start"] = sem_start
         st["semester_end"] = sem_end
@@ -127,7 +151,14 @@ def run_onboarding_gate(
 
     # Phase 2 — semester timeline
     if phase == 2:
-        if timezone_val and sem_start and sem_end:
+        if (
+            timezone_val
+            and sem_start
+            and sem_end
+            and _is_valid_timezone(timezone_val)
+            and _is_valid_date(sem_start)
+            and _is_valid_date(sem_end)
+        ):
             tool_actions.append(
                 {
                     "type": "set_class_timeline",
@@ -146,9 +177,12 @@ def run_onboarding_gate(
                 tool_actions,
             )
         return (
-            "Send your semester timeline:\n"
-            "`timezone=America/New_York; start=YYYY-MM-DD; end=YYYY-MM-DD`\n"
-            'or JSON: `{"timezone":"...","semester_start":"...","semester_end":"..."}`',
+            "Send your semester timeline (validated formats):\n"
+            "- timezone must be an IANA name (e.g. `America/New_York`)\n"
+            "- dates must be `YYYY-MM-DD`\n\n"
+            "Examples:\n"
+            "`timezone=America/New_York; start=2026-09-01; end=2026-12-20`\n"
+            'or JSON: `{"timezone":"America/New_York","semester_start":"2026-09-01","semester_end":"2026-12-20"}`',
             st,
             tool_actions,
         )

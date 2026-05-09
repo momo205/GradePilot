@@ -2,7 +2,13 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { listClasses, type ClassOut } from '@/lib/backend';
+import {
+  BackendError,
+  getUserSettings,
+  listClasses,
+  startGoogleCalendarOAuth,
+  type ClassOut,
+} from '@/lib/backend';
 import { StudyPlanShell } from '@/components/study-plan/StudyPlanShell';
 import { createClient } from '@/lib/supabase/client';
 
@@ -10,19 +16,23 @@ export default function ClassesIndexClient() {
   const supabase = createClient();
   const [classes, setClasses] = useState<ClassOut[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
+  const [googleConnectBusy, setGoogleConnectBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         setError(null);
-        const res = await listClasses();
+        const [res, settings] = await Promise.all([listClasses(), getUserSettings()]);
         if (cancelled) return;
         setClasses(res);
+        setGoogleConnected(settings.googleConnected);
       } catch (e: unknown) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : 'Failed to load classes');
         setClasses([]);
+        setGoogleConnected(null);
       }
     })();
     return () => {
@@ -59,6 +69,52 @@ export default function ClassesIndexClient() {
           {error}
         </div>
       ) : null}
+
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 mb-6">
+        <div className="text-sm font-semibold text-white">Google Calendar</div>
+        <p className="mt-1 text-sm text-slate-300">
+          Sync class deadlines to a calendar named &quot;GradePilot&quot; in your Google account.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {googleConnected === null ? (
+            <span className="text-xs text-slate-400">Checking connection…</span>
+          ) : googleConnected ? (
+            <span className="text-xs font-medium text-emerald-400">Connected</span>
+          ) : (
+            <button
+              type="button"
+              disabled={googleConnectBusy}
+              onClick={async () => {
+                setGoogleConnectBusy(true);
+                setError(null);
+                try {
+                      const { authorization_url, state, code_verifier } =
+                        await startGoogleCalendarOAuth();
+                      if (state && code_verifier) {
+                        sessionStorage.setItem(
+                          `gp_google_oauth_verifier:${state}`,
+                          code_verifier
+                        );
+                      }
+                  window.location.assign(authorization_url);
+                } catch (e: unknown) {
+                  const msg =
+                    e instanceof BackendError
+                      ? e.message
+                      : e instanceof Error
+                        ? e.message
+                        : 'Could not start Google sign-in';
+                  setError(msg);
+                  setGoogleConnectBusy(false);
+                }
+              }}
+              className="rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold disabled:opacity-60"
+            >
+              {googleConnectBusy ? 'Redirecting…' : 'Connect Google Calendar'}
+            </button>
+          )}
+        </div>
+      </div>
 
       {classes === null ? (
         <div className="text-sm text-slate-300">Loading…</div>
