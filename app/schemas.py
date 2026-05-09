@@ -54,6 +54,47 @@ class ClassCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
 
 
+class GradeBookComponent(BaseModel):
+    """One syllabus category (exam, homework bucket, final, …) with optional score."""
+
+    id: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=120)
+    weight_percent: float = Field(ge=0, le=100)
+    score_percent: float | None = Field(default=None, ge=0, le=100)
+
+
+class LetterGradeCutoff(BaseModel):
+    letter: str = Field(min_length=1, max_length=4)
+    min_percent: float = Field(ge=0, le=100)
+
+
+class GradeBookState(BaseModel):
+    """Weighted grade setup from the syllabus plus scores the student enters."""
+
+    components: list[GradeBookComponent] = Field(default_factory=list, max_length=40)
+    pass_percent: float = Field(default=60.0, ge=0, le=100)
+    target_percent: float = Field(default=73.0, ge=0, le=100)
+    letter_cutoffs: list[LetterGradeCutoff] = Field(
+        default_factory=lambda: [
+            LetterGradeCutoff(letter="A", min_percent=90),
+            LetterGradeCutoff(letter="B", min_percent=80),
+            LetterGradeCutoff(letter="C", min_percent=70),
+            LetterGradeCutoff(letter="D", min_percent=60),
+        ]
+    )
+
+    @model_validator(mode="after")
+    def _weights_and_cutoffs(self) -> "GradeBookState":
+        if self.components:
+            total_w = sum(c.weight_percent for c in self.components)
+            if abs(total_w - 100.0) > 0.02:
+                raise ValueError("Component weights must sum to 100%")
+        letters = [c.letter.upper() for c in self.letter_cutoffs]
+        if len(letters) != len(set(letters)):
+            raise ValueError("letter_cutoffs must not duplicate letters")
+        return self
+
+
 class ClassOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -65,7 +106,17 @@ class ClassOut(BaseModel):
     timezone: str | None = None
     availability_json: dict[str, Any] | None = None
     meeting_pattern: ClassMeetingPattern | None = None
+    grade_book: GradeBookState | None = None
     created_at: datetime
+
+    @field_validator("grade_book", mode="before")
+    @classmethod
+    def _coerce_grade_book(cls, v: Any) -> Any:
+        if v is None or isinstance(v, GradeBookState):
+            return v
+        if isinstance(v, dict):
+            return GradeBookState.model_validate(v)
+        return v
 
 
 class ClassTimelineUpdate(BaseModel):
@@ -84,6 +135,8 @@ class ClassSummaryOut(BaseModel):
     next_deadline_due_at: datetime | None = None
     latest_study_plan_id: uuid.UUID | None = None
     latest_study_plan_created_at: datetime | None = None
+    # True when at least one RAG document was indexed with document_type "syllabus".
+    has_indexed_syllabus: bool = False
 
 
 class NotesCreate(BaseModel):
@@ -139,6 +192,8 @@ class StudyPlanAI(BaseModel):
 class PracticeQuestion(BaseModel):
     q: str
     a: str
+    # Which saved notes / lecture this question is grounded in (e.g. "Lecture 2").
+    source_label: str = Field(default="Class notes", min_length=1)
 
 
 class PracticeQuestionsAI(BaseModel):
@@ -146,7 +201,6 @@ class PracticeQuestionsAI(BaseModel):
 
 
 class PracticeGenerateRequest(BaseModel):
-    topic: str = Field(min_length=1, max_length=200)
     count: int = Field(default=5, ge=1, le=10)
     difficulty: Literal["Easy", "Medium", "Hard"] = "Medium"
 

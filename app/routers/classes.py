@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.agents.replanner.graph import ReplannerInput, Trigger, run_replanner
@@ -22,6 +23,7 @@ from app.schemas import (
     DeadlineOut,
     DeadlineImportOut,
     DeadlineUpdate,
+    GradeBookState,
     NotesCreate,
     NotesOut,
     PracticeGenerateOut,
@@ -55,6 +57,9 @@ from app.services.study_plan_semester import (
     SemesterStudyPlanRateLimitError,
     generate_semester_study_plan,
 )
+
+# Per-lecture cap when building the practice prompt (avoids huge uploads).
+_PRACTICE_NOTE_MAX_CHARS = 8000
 
 router = APIRouter(prefix="/classes", tags=["classes"])
 
@@ -188,6 +193,13 @@ def get_class_summary_endpoint(
     next_deadline = crud.get_next_deadline(db=db, user_id=user_id, class_id=class_id)
     latest_plan = crud.get_latest_study_plan(db=db, user_id=user_id, class_id=class_id)
 
+    try:
+        has_syllabus = crud.class_has_indexed_syllabus(
+            db=db, user_id=user_id, class_id=class_id
+        )
+    except ProgrammingError:
+        has_syllabus = False
+
     return ClassSummaryOut(
         clazz=ClassOut.model_validate(clazz),
         deadline_count=len(deadlines),
@@ -196,6 +208,7 @@ def get_class_summary_endpoint(
         next_deadline_due_at=(next_deadline.due_at if next_deadline else None),
         latest_study_plan_id=(latest_plan.id if latest_plan else None),
         latest_study_plan_created_at=(latest_plan.created_at if latest_plan else None),
+        has_indexed_syllabus=has_syllabus,
     )
 
 
@@ -233,6 +246,28 @@ def update_class_timeline_endpoint(
     if updated is None:
         raise HTTPException(status_code=404, detail="Class not found")
     return ClassOut.model_validate(updated)
+
+
+@router.put("/{class_id}/grade-book", response_model=GradeBookState)
+def put_class_grade_book(
+    class_id: uuid.UUID,
+    payload: GradeBookState,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> GradeBookState:
+    user_id = _user_uuid(user)
+    clazz = crud.get_class(db=db, user_id=user_id, class_id=class_id)
+    if clazz is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+    updated = crud.update_class_grade_book(
+        db=db,
+        user_id=user_id,
+        class_id=class_id,
+        grade_book=payload.model_dump(mode="json"),
+    )
+    if updated is None or updated.grade_book is None:
+        raise HTTPException(status_code=500, detail="Failed to save grade book")
+    return GradeBookState.model_validate(updated.grade_book)
 
 
 @router.get("/{class_id}/notes", response_model=list[NotesOut])
@@ -281,10 +316,24 @@ def generate_practice(
     clazz = crud.get_class(db=db, user_id=user_id, class_id=class_id)
     if clazz is None:
         raise HTTPException(status_code=404, detail="Class not found")
+    notes_list = crud.list_notes(db=db, user_id=user_id, class_id=class_id)
+    if not notes_list:
+        raise HTTPException(status_code=400, detail="No notes available for class")
+    notes_ordered = sorted(notes_list, key=lambda n: n.created_at)
+    segments: list[tuple[str, str]] = []
+    for i, n in enumerate(notes_ordered, start=1):
+        label = f"Lecture {i}"
+        text = n.notes_text
+        if len(text) > _PRACTICE_NOTE_MAX_CHARS:
+            text = (
+                text[:_PRACTICE_NOTE_MAX_CHARS]
+                + "\n\n[...truncated for question generation]"
+            )
+        segments.append((label, text))
     try:
         questions = generate_practice_questions(
             class_title=clazz.title,
-            topic=payload.topic,
+            note_segments=segments,
             count=payload.count,
             difficulty=payload.difficulty,
         )

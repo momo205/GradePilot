@@ -71,6 +71,7 @@ def test_classes_create_list_and_summary(client: TestClient) -> None:
     payload = r.json()
     assert payload["clazz"]["id"] == class_id
     assert payload["deadline_count"] == 0
+    assert payload.get("has_indexed_syllabus") is False
 
 
 def test_chat_session_create_get_and_post_message_creates_classes(
@@ -303,7 +304,7 @@ def test_classes_notes_deadlines_and_plans_endpoints(
 
     r = client.post(
         f"/classes/{class_id}/practice",
-        json={"topic": "SQL", "count": 1, "difficulty": "Easy"},
+        json={"count": 1, "difficulty": "Easy"},
     )
     assert r.status_code == 200
     assert len(r.json()["questions"]) == 1
@@ -436,7 +437,7 @@ def test_summarise_and_google_routes_smoke(
 
     r = client.post(
         f"/classes/{class_id}/deadlines",
-        # Calendar sync skips deadlines without a parsed due_at; "tomorrow" is not parsed.
+        # Sync skips deadlines without due_at; only ISO / YYYY-MM-DD are parsed.
         json={"title": "HW", "due": "2026-05-10"},
     )
     assert r.status_code == 200

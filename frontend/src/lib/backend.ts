@@ -99,6 +99,18 @@ export type PreferredStudyWindow = {
   end: string;
 };
 
+export type GradeBookState = {
+  components: {
+    id: string;
+    name: string;
+    weight_percent: number;
+    score_percent: number | null;
+  }[];
+  pass_percent: number;
+  target_percent: number;
+  letter_cutoffs: { letter: string; min_percent: number }[];
+};
+
 export type ClassOut = {
   id: string;
   user_id: string;
@@ -108,6 +120,7 @@ export type ClassOut = {
   timezone?: string | null;
   availability_json?: Record<string, unknown> | null;
   meeting_pattern?: MeetingPattern | null;
+  grade_book?: GradeBookState | null;
   created_at: string;
 };
 
@@ -119,6 +132,7 @@ export type ClassSummaryOut = {
   next_deadline_due_at: string | null;
   latest_study_plan_id: string | null;
   latest_study_plan_created_at: string | null;
+  has_indexed_syllabus: boolean;
 };
 
 export type NotesOut = {
@@ -156,12 +170,12 @@ export type StudyPlanOut = {
   scheduled_plan_sessions?: ScheduledPlanSession[];
 };
 
-export type PracticeQuestion = { q: string; a: string };
+export type PracticeQuestion = { q: string; a: string; source_label?: string };
 
-export function generatePractice(classId: string, topic: string, count: number, difficulty: string) {
+export function generatePractice(classId: string, count: number, difficulty: string) {
   return backendFetch<{ questions: PracticeQuestion[] }>(`/classes/${classId}/practice`, {
     method: 'POST',
-    body: JSON.stringify({ topic, count, difficulty }),
+    body: JSON.stringify({ count, difficulty }),
   });
 }
 
@@ -178,6 +192,13 @@ export function createClass(title: string) {
 
 export function getClassSummary(classId: string) {
   return backendFetch<ClassSummaryOut>(`/classes/${classId}`);
+}
+
+export function updateClassGradeBook(classId: string, body: GradeBookState) {
+  return backendFetch<GradeBookState>(`/classes/${classId}/grade-book`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
 }
 
 export function addNotes(classId: string, notes_text: string) {

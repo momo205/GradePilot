@@ -74,6 +74,23 @@ def update_class_timeline(
     return clazz
 
 
+def update_class_grade_book(
+    *,
+    db: Session,
+    user_id: uuid.UUID,
+    class_id: uuid.UUID,
+    grade_book: dict[str, Any],
+) -> Class | None:
+    clazz = get_class(db=db, user_id=user_id, class_id=class_id)
+    if clazz is None:
+        return None
+    clazz.grade_book = grade_book
+    db.add(clazz)
+    db.commit()
+    db.refresh(clazz)
+    return clazz
+
+
 def create_notes(
     *, db: Session, user_id: uuid.UUID, class_id: uuid.UUID, notes_text: str
 ) -> ClassNotes:
@@ -285,6 +302,21 @@ def delete_deadline(
     db.delete(deadline)
     db.commit()
     return True
+
+
+def class_has_indexed_syllabus(
+    *, db: Session, user_id: uuid.UUID, class_id: uuid.UUID
+) -> bool:
+    stmt = (
+        select(Document.id)
+        .where(
+            Document.user_id == user_id,
+            Document.class_id == class_id,
+            Document.document_type == "syllabus",
+        )
+        .limit(1)
+    )
+    return db.execute(stmt).scalar_one_or_none() is not None
 
 
 def create_document(

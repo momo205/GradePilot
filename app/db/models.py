@@ -47,6 +47,12 @@ class Class(Base):
         nullable=True,
         default=None,
     )
+    # Weighted grade components, pass/target lines, optional letter cutoffs (syllabus-driven).
+    grade_book: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=True,
+        default=None,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -75,7 +75,6 @@ export default function StudyPlanClient() {
   const [summarising, setSummarising] = useState(false);
   const [lastUpload, setLastUpload] = useState<{ filename: string; text: string } | null>(null);
 
-  const [practiceTopic, setPracticeTopic] = useState('');
   const [practiceCount, setPracticeCount] = useState(5);
   const [practiceDifficulty, setPracticeDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>(
     'Medium'
@@ -424,10 +423,9 @@ export default function StudyPlanClient() {
 
               <PracticePanel
                 hasNotes={Boolean(notes && notes.length > 0)}
-                practiceTopic={practiceTopic}
+                lectureCount={notes?.length ?? 0}
                 practiceCount={practiceCount}
                 practiceDifficulty={practiceDifficulty}
-                onPracticeTopicChange={setPracticeTopic}
                 onPracticeCountChange={setPracticeCount}
                 onPracticeDifficultyChange={setPracticeDifficulty}
                 loading={loading}
@@ -439,7 +437,6 @@ export default function StudyPlanClient() {
                   try {
                     const res = await generatePractice(
                       selectedClassId,
-                      practiceTopic.trim(),
                       practiceCount,
                       practiceDifficulty
                     );

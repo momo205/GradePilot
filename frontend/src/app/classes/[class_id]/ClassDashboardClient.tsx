@@ -42,6 +42,7 @@ import { NotesPanel } from '@/components/study-plan/NotesPanel';
 import { PracticePanel } from '@/components/study-plan/PracticePanel';
 import { RagPanel } from '@/components/study-plan/RagPanel';
 import { PlanPanel } from '@/components/study-plan/PlanPanel';
+import { GradeBookPanel } from '@/components/study-plan/GradeBookPanel';
 
 type Tab = 'overview' | 'deadlines' | 'notes' | 'practice';
 
@@ -82,7 +83,6 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
   const [deadlineTitle, setDeadlineTitle] = useState('');
   const [deadlineDue, setDeadlineDue] = useState('');
 
-  const [practiceTopic, setPracticeTopic] = useState('');
   const [practiceCount, setPracticeCount] = useState(5);
   const [practiceDifficulty, setPracticeDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>(
     'Medium'
@@ -194,6 +194,22 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
       controller.abort();
     };
   }, [classId]);
+
+  useEffect(() => {
+    if (tab !== 'overview') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await getClassSummary(classId);
+        if (!cancelled) setSummary(s);
+      } catch {
+        /* keep existing summary on refresh failure */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, classId]);
 
   async function persistAutoSchedule(next: boolean): Promise<void> {
     setSavingAutoSchedule(true);
@@ -367,6 +383,18 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
               </div>
             </div>
           </div>
+
+          <GradeBookPanel
+            classId={classId}
+            gradeBook={summary?.clazz.grade_book ?? null}
+            hasIndexedSyllabus={summary?.has_indexed_syllabus ?? false}
+            onOpenNotesTab={() => setTab('notes')}
+            onSaved={(g) => {
+              setSummary((s) =>
+                s ? { ...s, clazz: { ...s.clazz, grade_book: g } } : s
+              );
+            }}
+          />
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1004,10 +1032,9 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
       {tab === 'practice' ? (
         <PracticePanel
           hasNotes={Boolean(notes && notes.length > 0)}
-          practiceTopic={practiceTopic}
+          lectureCount={notes?.length ?? 0}
           practiceCount={practiceCount}
           practiceDifficulty={practiceDifficulty}
-          onPracticeTopicChange={setPracticeTopic}
           onPracticeCountChange={setPracticeCount}
           onPracticeDifficultyChange={setPracticeDifficulty}
           loading={loading}
@@ -1016,7 +1043,7 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
             setLoading(true);
             setError(null);
             try {
-              const res = await generatePractice(classId, practiceTopic.trim(), practiceCount, practiceDifficulty);
+              const res = await generatePractice(classId, practiceCount, practiceDifficulty);
               setPractice(res.questions);
             } catch (e: unknown) {
               setError(e instanceof Error ? e.message : 'Failed to generate practice');
