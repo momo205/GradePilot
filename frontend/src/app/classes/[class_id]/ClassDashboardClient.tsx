@@ -22,6 +22,7 @@ import {
   updateClassTimeline,
   updateDeadline,
   updateUserSettings,
+  updateStudyPlanProgress,
   uploadMaterialPdf,
   uploadMaterialText,
   type ClassAskOut,
@@ -1004,6 +1005,26 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
             hasNotes={Boolean(notes && notes.length > 0)}
             plan={plan}
             loading={loading}
+            onToggleTask={async (taskText, completed) => {
+              if (!plan) return;
+              const currentCompleted = plan.plan_json.completed_tasks ?? [];
+              let newCompleted: string[];
+              if (completed) {
+                newCompleted = [...currentCompleted, taskText];
+              } else {
+                newCompleted = currentCompleted.filter(t => t !== taskText);
+              }
+              setPlan({
+                ...plan,
+                plan_json: { ...plan.plan_json, completed_tasks: newCompleted },
+              });
+              try {
+                await updateStudyPlanProgress(classId, plan.id, newCompleted);
+              } catch (e: unknown) {
+                setError(e instanceof Error ? e.message : 'Failed to update progress');
+                setPlan(plan);
+              }
+            }}
             onGenerate={async () => {
               setLoading(true);
               setError(null);
