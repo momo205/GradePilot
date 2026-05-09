@@ -31,6 +31,7 @@ import {
   type MeetingPattern,
   type NotesOut,
   type PracticeQuestion,
+  type ScheduledPlanSession,
   type ScheduledSession,
   type StudyPlanOut,
   type SummariseOut,
@@ -120,6 +121,9 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
 
   const [lastScheduledSession, setLastScheduledSession] =
     useState<ScheduledSession | null>(null);
+  const [lastPlanSessions, setLastPlanSessions] = useState<
+    ScheduledPlanSession[]
+  >([]);
   const [autoSchedulingBusy, setAutoSchedulingBusy] = useState(false);
   const [autoSchedulingHint, setAutoSchedulingHint] = useState<string | null>(
     null
@@ -217,6 +221,8 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
         return 'No upcoming lecture or deadline to anchor against. Add a deadline or set a meeting pattern.';
       if (e.includes('skip:no_slot_found'))
         return 'No free 60-minute slot found before the next lecture/deadline. Try widening your preferred study windows.';
+      if (e.startsWith('schedule_plan_sessions_'))
+        return 'Some plan days could not be booked (no free slot). Widen your preferred study windows or clear time on your calendar.';
       if (e.includes('schedule_study_session_'))
         return 'Could not schedule a session. Try again, or check Google Calendar access.';
     }
@@ -232,7 +238,13 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
         force_schedule_session: opts.manual,
       });
       setLastScheduledSession(result.scheduled_session);
-      if (result.scheduled_session) {
+      if (result.scheduled_plan_sessions) {
+        setLastPlanSessions(result.scheduled_plan_sessions);
+      }
+      if (
+        result.scheduled_session ||
+        (result.scheduled_plan_sessions ?? []).length > 0
+      ) {
         setAutoSchedulingHint(null);
         return;
       }
@@ -544,6 +556,65 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
                 every notes upload.
               </div>
             )}
+
+            {lastPlanSessions.length > 0 ? (
+              <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-300">
+                  Plan day blocks ({lastPlanSessions.length} on calendar)
+                </div>
+                <div className="mt-2 space-y-2">
+                  {lastPlanSessions.map((s) => (
+                    <div
+                      key={s.day_index}
+                      className="rounded-lg border border-white/10 bg-black/30 p-2"
+                    >
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <div className="text-sm font-semibold text-white">
+                          {s.day_label}
+                        </div>
+                        <div className="text-xs text-slate-300">
+                          {new Date(s.start).toLocaleString([], {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}{' '}
+                          →{' '}
+                          {new Date(s.end).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                          {s.in_preferred_window ? '' : ' · best available'}
+                        </div>
+                      </div>
+                      {s.tasks.length > 0 ? (
+                        <ul className="mt-1 list-disc list-inside text-xs text-slate-300 space-y-0.5">
+                          {s.tasks.slice(0, 3).map((t, i) => (
+                            <li key={i} className="truncate">{t}</li>
+                          ))}
+                          {s.tasks.length > 3 ? (
+                            <li className="text-slate-400">
+                              +{s.tasks.length - 3} more
+                            </li>
+                          ) : null}
+                        </ul>
+                      ) : null}
+                      {s.calendar_event_link ? (
+                        <a
+                          href={s.calendar_event_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-block text-xs text-slate-200 hover:text-white underline"
+                        >
+                          Open in Google Calendar
+                        </a>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {autoSchedulingHint ? (
               <p className="mt-2 text-xs text-amber-200/90">
@@ -912,8 +983,13 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
                 const latestNotesId = notes?.[0]?.id;
                 const created = await createStudyPlan(classId, latestNotesId);
                 setPlan(created);
-                if (autoSchedule) {
-                  void triggerScheduling({ manual: false });
+                if (created.scheduled_plan_sessions?.length) {
+                  setLastPlanSessions(created.scheduled_plan_sessions);
+                  setAutoSchedulingHint(null);
+                } else if (autoSchedule) {
+                  setAutoSchedulingHint(
+                    'Plan generated, but no calendar slots were free for the plan days.'
+                  );
                 }
               } catch (e: unknown) {
                 setError(e instanceof Error ? e.message : 'Failed to generate plan');

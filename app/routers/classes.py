@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+import math
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -41,6 +43,8 @@ from app.services.practice import (
     PracticeRateLimitError,
     generate_practice_questions,
 )
+from app.services.scheduling.anchors import compute_next_anchor
+from app.services.scheduling.plan_sessions import schedule_plan_day_sessions
 from app.services.study_plan import (
     StudyPlanGenerationError,
     StudyPlanRateLimitError,
@@ -86,6 +90,64 @@ def _user_uuid(user: CurrentUser) -> uuid.UUID:
         return uuid.UUID(user.user_id)
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid user id")
+
+
+def _compute_plan_horizon(
+    *,
+    db: Session,
+    user_id: uuid.UUID,
+    class_id: uuid.UUID,
+    clazz: Any,
+) -> tuple[int, str]:
+    """Return ``(horizon_days, horizon_reason)`` for the notes-driven plan.
+
+    Uses the same ``compute_next_anchor`` used by the scheduler so the plan
+    horizon, the auto-booked study session, and the user's mental model all
+    agree on what "the next checkpoint" means: earliest of the next lecture
+    (from ``meeting_pattern``), the next deadline, or a 7-day fallback.
+
+    ``horizon_days`` is at least 1. Falls back to a 7-day "next checkpoint"
+    if the anchor calculation cannot find anything (e.g. malformed timezone).
+    """
+    try:
+        deadlines = crud.list_deadlines(db=db, user_id=user_id, class_id=class_id)
+        deadline_payload: list[dict[str, Any]] = [
+            {
+                "id": str(d.id),
+                "title": d.title,
+                "due_text": d.due_text,
+                "due_at": (d.due_at.isoformat() if d.due_at else None),
+            }
+            for d in deadlines
+            if d.completed_at is None
+        ]
+        class_data: dict[str, Any] = {
+            "title": clazz.title,
+            "timezone": clazz.timezone,
+            "semester_start": clazz.semester_start,
+            "semester_end": clazz.semester_end,
+            "meeting_pattern": clazz.meeting_pattern,
+        }
+        now = datetime.now(timezone.utc)
+        anchor = compute_next_anchor(
+            class_data=class_data,
+            deadlines=deadline_payload,
+            from_dt=now,
+        )
+        # Round UP so a lecture later today still yields a 1-day plan.
+        delta_seconds = (anchor.at - now).total_seconds()
+        days = max(1, math.ceil(delta_seconds / 86400.0))
+        days = min(days, 14)
+        if anchor.kind == "next_lecture":
+            reason = f"your next lecture on {anchor.at.strftime('%a %b %-d, %-I:%M %p %Z')}"
+        elif anchor.kind == "next_deadline":
+            reason = f"your next deadline on {anchor.at.strftime('%a %b %-d, %-I:%M %p %Z')}"
+        else:
+            reason = "the next 7-day checkpoint"
+        return days, reason
+    except Exception:  # noqa: BLE001
+        logger.exception("plan_horizon_failed class_id=%s", class_id)
+        return 7, "the next checkpoint"
 
 
 @router.get("", response_model=list[ClassOut])
@@ -253,9 +315,16 @@ def create_study_plan_endpoint(
         if notes is None:
             raise HTTPException(status_code=400, detail="No notes available for class")
 
+    horizon_days, horizon_reason = _compute_plan_horizon(
+        db=db, user_id=user_id, class_id=class_id, clazz=clazz
+    )
+
     try:
         plan_json, model_name = generate_study_plan(
-            class_title=clazz.title, notes_text=notes.notes_text
+            class_title=clazz.title,
+            notes_text=notes.notes_text,
+            horizon_days=horizon_days,
+            horizon_reason=horizon_reason,
         )
     except StudyPlanRateLimitError as e:
         headers = {}
@@ -273,7 +342,46 @@ def create_study_plan_endpoint(
         plan_json=plan_json,
         model=model_name,
     )
-    return StudyPlanOut.model_validate(plan)
+
+    # Best-effort: book one calendar block per plan day for users who have
+    # opted into auto-scheduling. Failures here are logged but never bubbled,
+    # so a Google outage cannot break plan creation. The booked sessions are
+    # surfaced back to the client in the response so the dashboard can render
+    # "N day blocks added to your calendar" without a second request.
+    scheduled_sessions: list[dict[str, Any]] = []
+    try:
+        user_settings = crud.get_user_settings(db=db, user_id=user_id)
+        if (
+            user_settings is not None
+            and bool(user_settings.auto_schedule_sessions)
+            and crud.get_google_integration(db=db, user_id=user_id) is not None
+        ):
+            scheduled_sessions, _errors = schedule_plan_day_sessions(
+                db=db,
+                user_id=user_id,
+                class_id=class_id,
+                plan_id=plan.id,
+                plan_json=plan_json,
+                class_title=clazz.title,
+                user_timezone=(
+                    user_settings.timezone
+                    or clazz.timezone
+                    or "UTC"
+                ),
+                preferred_windows=list(
+                    user_settings.preferred_study_windows or []
+                ),
+            )
+    except Exception:
+        logger.exception(
+            "auto_schedule_plan_sessions_failed plan_id=%s class_id=%s",
+            plan.id,
+            class_id,
+        )
+
+    out = StudyPlanOut.model_validate(plan)
+    out.scheduled_plan_sessions = scheduled_sessions
+    return out
 
 
 @router.post("/{class_id}/study-plan/semester", response_model=StudyPlanOut)

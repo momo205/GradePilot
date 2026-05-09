@@ -153,6 +153,7 @@ export type StudyPlanOut = {
   };
   model: string;
   created_at: string;
+  scheduled_plan_sessions?: ScheduledPlanSession[];
 };
 
 export type PracticeQuestion = { q: string; a: string };
@@ -380,6 +381,17 @@ export type ScheduledSession = {
   anchor_kind: 'next_lecture' | 'next_deadline' | 'fallback';
 };
 
+export type ScheduledPlanSession = {
+  day_index: number;
+  day_label: string;
+  tasks: string[];
+  start: string;
+  end: string;
+  in_preferred_window: boolean;
+  calendar_event_link: string;
+  calendar_event_id: string;
+};
+
 export type ReplannerOut = {
   should_replan: boolean | null;
   replan_reason: string | null;
@@ -388,6 +400,7 @@ export type ReplannerOut = {
   new_plan: Record<string, unknown> | null;
   calendar_sync_result: Record<string, unknown> | null;
   scheduled_session: ScheduledSession | null;
+  scheduled_plan_sessions: ScheduledPlanSession[];
   errors: string[];
 };
 

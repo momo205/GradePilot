@@ -11,6 +11,7 @@ from app.agents.replanner.nodes import (
     generate_plan,
     load_context,
     persist_plan,
+    schedule_plan_sessions,
     schedule_study_session,
     should_replan_gate,
     sync_calendar,
@@ -78,6 +79,7 @@ def build_graph(*, checkpointer: Any | None = None) -> Any:
     graph.add_node("should_replan_gate", should_replan_gate)
     graph.add_node("generate_plan", generate_plan)
     graph.add_node("persist_plan", persist_plan)
+    graph.add_node("schedule_plan_sessions", schedule_plan_sessions)
     graph.add_node("schedule_study_session", schedule_study_session)
     graph.add_node("sync_calendar", sync_calendar)
     graph.add_node("finalize", finalize)
@@ -111,10 +113,13 @@ def build_graph(*, checkpointer: Any | None = None) -> Any:
     def _sync_branch(s: ReplannerState) -> str:
         return "sync" if should_sync_calendar(s) else "nosync"
 
-    # After persist_plan, route notes_added (or any manual force-schedule
-    # request) through schedule_study_session before falling through to the
-    # existing calendar-sync gate. Other triggers continue to use the original
-    # branching.
+    # After persist_plan, route through scheduling whenever notes_added (or any
+    # manual force-schedule request) brought us here. The flow is now
+    # persist_plan -> schedule_plan_sessions -> schedule_study_session ->
+    # sync_calendar gate, so the user gets:
+    #   * one calendar block per day in the new plan (plan-day sessions), and
+    #   * a single focused-study session anchored to the next lecture.
+    # Other triggers (deadline_added, etc.) keep the original sync-only path.
     def _post_persist_branch(s: ReplannerState) -> str:
         if s.get("trigger") == "notes_added" or s.get(
             "force_schedule_session", False
@@ -126,11 +131,12 @@ def build_graph(*, checkpointer: Any | None = None) -> Any:
         "persist_plan",
         _post_persist_branch,
         {
-            "schedule": "schedule_study_session",
+            "schedule": "schedule_plan_sessions",
             "sync": "sync_calendar",
             "nosync": "finalize",
         },
     )
+    graph.add_edge("schedule_plan_sessions", "schedule_study_session")
     graph.add_conditional_edges(
         "schedule_study_session",
         _sync_branch,

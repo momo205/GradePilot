@@ -84,5 +84,6 @@ async def replan_class(
         "new_plan": out.get("new_plan"),
         "calendar_sync_result": out.get("calendar_sync_result"),
         "scheduled_session": out.get("scheduled_session"),
+        "scheduled_plan_sessions": out.get("scheduled_plan_sessions") or [],
         "errors": out.get("errors", []),
     }

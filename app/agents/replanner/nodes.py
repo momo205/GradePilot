@@ -130,6 +130,10 @@ def load_context(state: ReplannerState) -> ReplannerState:
             "semester_end": clazz.semester_end,
             "timezone": clazz.timezone,
             "availability_json": clazz.availability_json,
+            # Required by compute_next_anchor so auto-scheduling can use the
+            # next lecture as the deadline. Without this key, the anchor
+            # silently falls back to next_deadline / 7-day fallback.
+            "meeting_pattern": clazz.meeting_pattern,
             "created_at": _utc_iso(clazz.created_at),
         }
         state["deadlines"] = _deadline_payload(deadlines)
@@ -588,6 +592,88 @@ def schedule_study_session(state: ReplannerState) -> ReplannerState:
             "calendar_event_id": event.get("event_id", ""),
             "anchor_kind": anchor.kind,
         }
+    finally:
+        db.close()
+    return state
+
+
+def schedule_plan_sessions(state: ReplannerState) -> ReplannerState:
+    """Book one calendar block per day in the freshly-generated plan.
+
+    Thin wrapper over ``app.services.scheduling.plan_sessions`` so the same
+    logic powers both this graph node and the ``POST /study-plan`` endpoint.
+    """
+    state.setdefault("scheduled_plan_sessions", [])
+
+    if state.get("dry_run", False):
+        return state
+
+    forced = bool(state.get("force_schedule_session", False))
+    settings_dict = state.get("user_settings") or {}
+    if not forced and not bool(settings_dict.get("auto_schedule_sessions", False)):
+        return state
+    if not state.get("has_google_integration", False):
+        if forced:
+            state["errors"].append("schedule_plan_sessions_skip:no_google_integration")
+        return state
+
+    new_plan = state.get("new_plan")
+    new_plan_id = state.get("new_plan_id")
+    if not isinstance(new_plan, dict) or not isinstance(new_plan_id, str):
+        return state
+
+    class_data = state.get("class_data")
+    if not isinstance(class_data, dict):
+        return state
+
+    try:
+        from app.services.scheduling.plan_sessions import schedule_plan_day_sessions
+    except Exception as e:  # noqa: BLE001
+        state["errors"].append(
+            f"schedule_plan_sessions_import_failed:{e.__class__.__name__}"
+        )
+        return state
+
+    user_tz_name = settings_dict.get("timezone") or class_data.get("timezone") or "UTC"
+    preferred_windows_raw = settings_dict.get("preferred_study_windows") or []
+    preferred_windows: list[dict[str, str]] = [
+        w
+        for w in preferred_windows_raw
+        if isinstance(w, dict)
+        and isinstance(w.get("start"), str)
+        and isinstance(w.get("end"), str)
+    ]
+
+    db = _make_session()
+    try:
+        try:
+            user_uuid = uuid.UUID(state["user_id"])
+            class_uuid = uuid.UUID(state["class_id"])
+            plan_uuid = uuid.UUID(new_plan_id)
+        except (KeyError, ValueError):
+            state["errors"].append("schedule_plan_sessions_invalid_ids")
+            return state
+
+        results, errors = schedule_plan_day_sessions(
+            db=db,
+            user_id=user_uuid,
+            class_id=class_uuid,
+            plan_id=plan_uuid,
+            plan_json=new_plan,
+            class_title=str(class_data.get("title") or "class"),
+            user_timezone=str(user_tz_name) if isinstance(user_tz_name, str) else "UTC",
+            preferred_windows=preferred_windows,
+        )
+        # Re-prefix the service errors so the frontend can distinguish
+        # plan-day failures from the single-session failures emitted by
+        # schedule_study_session. Service codes look like
+        # "plan_sessions_skip:day=2:no_slot_found"; we want
+        # "schedule_plan_sessions_skip:day=2:no_slot_found".
+        for err in errors:
+            state["errors"].append(
+                err.replace("plan_sessions_", "schedule_plan_sessions_", 1)
+            )
+        state["scheduled_plan_sessions"] = results
     finally:
         db.close()
     return state

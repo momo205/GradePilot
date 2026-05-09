@@ -336,6 +336,109 @@ def create_study_session_event(
     return {"event_id": event_id, "html_link": html_link}
 
 
+def upsert_plan_day_event(
+    *,
+    db: Session,
+    user_id: str,
+    class_id: uuid.UUID,
+    plan_id: uuid.UUID,
+    day_index: int,
+    title: str,
+    start: datetime,
+    end: datetime,
+    description: str = "",
+) -> dict[str, str]:
+    """Create or update a calendar event for one day of a generated plan.
+
+    Idempotent on ``(user_id, kind="plan_day_session", local_id=f"{plan_id}:{day_index}")``
+    so re-running the replanner for the same plan never produces duplicate
+    events; it patches the existing one in place. Generating a *new* plan
+    yields a new ``plan_id`` so old events from the previous plan are simply
+    left alone (the user can clear them in Google Calendar).
+
+    Returns ``{"event_id": ..., "html_link": ...}``.
+
+    Raises:
+        ValueError: if ``start``/``end`` are naive or ``end <= start``.
+        RuntimeError: if Google OAuth is not configured, the user has no
+            integration, or the stored grant lacks the required scopes.
+    """
+    if start.tzinfo is None or end.tzinfo is None:
+        raise ValueError("start and end must be timezone-aware")
+    if end <= start:
+        raise ValueError("end must be after start")
+    if day_index < 0:
+        raise ValueError("day_index must be non-negative")
+
+    user_uuid = uuid.UUID(user_id)
+
+    settings = get_settings()
+    if not settings.google_oauth_client_id or not settings.google_oauth_client_secret:
+        raise RuntimeError("Google OAuth is not configured")
+
+    integ = crud.get_google_integration(db=db, user_id=user_uuid)
+    if integ is None:
+        raise RuntimeError("Google integration not connected")
+    if not has_required_scopes(integ):
+        raise RuntimeError("Google integration is missing required scopes")
+
+    creds = build_google_credentials_for_calendar(
+        client_id=settings.google_oauth_client_id,
+        client_secret=settings.google_oauth_client_secret,
+        access_token=integ.access_token,
+        refresh_token=integ.refresh_token,
+    )
+    calendar_id = get_or_create_gradepilot_calendar(creds=creds)
+
+    full_description = (
+        "Auto-scheduled by GradePilot.\n"
+        f"Plan: {plan_id} (day {day_index + 1})\n"
+    )
+    if description:
+        full_description += "\n" + description
+
+    body: dict[str, Any] = {
+        "summary": title,
+        "description": full_description,
+        "start": {"dateTime": start.isoformat()},
+        "end": {"dateTime": end.isoformat()},
+    }
+
+    svc = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    local_id = f"{plan_id}:{day_index}"
+    existing_link = crud.get_calendar_event_link(
+        db=db, user_id=user_uuid, kind="plan_day_session", local_id=local_id
+    )
+
+    if existing_link is not None:
+        event = (
+            svc.events()
+            .patch(
+                calendarId=calendar_id,
+                eventId=existing_link.google_event_id,
+                body=body,
+            )
+            .execute()
+        )
+    else:
+        event = svc.events().insert(calendarId=calendar_id, body=body).execute()
+
+    event_id = str(event.get("id") or "")
+    html_link = str(event.get("htmlLink") or "")
+
+    crud.upsert_calendar_event_link(
+        db=db,
+        user_id=user_uuid,
+        class_id=class_id,
+        kind="plan_day_session",
+        local_id=local_id,
+        google_calendar_id=calendar_id,
+        google_event_id=event_id,
+    )
+
+    return {"event_id": event_id, "html_link": html_link}
+
+
 def _merge_intervals(
     intervals: list[tuple[datetime, datetime]],
 ) -> list[tuple[datetime, datetime]]:

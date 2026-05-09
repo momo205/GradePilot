@@ -118,6 +118,11 @@ class StudyPlanOut(BaseModel):
     plan_json: dict[str, Any]
     model: str
     created_at: datetime
+    # Populated only by the create endpoint when the user has opted into
+    # auto-scheduling AND Google Calendar is connected: one entry per plan
+    # day that successfully landed on the GradePilot calendar. Other
+    # endpoints (GET /latest, PATCH /progress) leave this as an empty list.
+    scheduled_plan_sessions: list[dict[str, Any]] = []
 
 
 class StudyPlanAIItem(BaseModel):
