@@ -1,10 +1,53 @@
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+_HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def _hhmm_to_minutes(value: str) -> int:
+    hh, mm = value.split(":")
+    return int(hh) * 60 + int(mm)
+
+
+class ClassMeetingPattern(BaseModel):
+    """Recurring lecture pattern in the class timezone.
+
+    weekdays uses Python's Monday=0 ... Sunday=6 convention so it lines up with
+    `datetime.weekday()`.
+    """
+
+    weekdays: list[int] = Field(min_length=1, max_length=7)
+    start_time: str = Field(min_length=5, max_length=5)
+    end_time: str = Field(min_length=5, max_length=5)
+
+    @field_validator("weekdays")
+    @classmethod
+    def _check_weekdays(cls, v: list[int]) -> list[int]:
+        for day in v:
+            if not 0 <= day <= 6:
+                raise ValueError("weekdays must be integers in [0, 6]")
+        if len(set(v)) != len(v):
+            raise ValueError("weekdays must not contain duplicates")
+        return sorted(v)
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def _check_hhmm(cls, v: str) -> str:
+        if not _HHMM_RE.match(v):
+            raise ValueError("time must be HH:MM in 24h format")
+        return v
+
+    @model_validator(mode="after")
+    def _check_order(self) -> "ClassMeetingPattern":
+        if _hhmm_to_minutes(self.start_time) >= _hhmm_to_minutes(self.end_time):
+            raise ValueError("start_time must be earlier than end_time")
+        return self
 
 
 class ClassCreate(BaseModel):
@@ -21,6 +64,7 @@ class ClassOut(BaseModel):
     semester_end: str | None = None
     timezone: str | None = None
     availability_json: dict[str, Any] | None = None
+    meeting_pattern: ClassMeetingPattern | None = None
     created_at: datetime
 
 
@@ -29,6 +73,7 @@ class ClassTimelineUpdate(BaseModel):
     semester_end: str | None = Field(default=None, max_length=40)
     timezone: str | None = Field(default=None, max_length=60)
     availability: list["StudyAvailabilityBlock"] | None = None
+    meeting_pattern: ClassMeetingPattern | None = None
 
 
 class ClassSummaryOut(BaseModel):
@@ -251,14 +296,40 @@ class StudyPlanSemesterCreate(BaseModel):
     availability: list[StudyAvailabilityBlock] | None = None
 
 
+class PreferredStudyWindow(BaseModel):
+    """A daily time window (user local time) where study sessions may land."""
+
+    start: str = Field(min_length=5, max_length=5)
+    end: str = Field(min_length=5, max_length=5)
+
+    @field_validator("start", "end")
+    @classmethod
+    def _check_hhmm(cls, v: str) -> str:
+        if not _HHMM_RE.match(v):
+            raise ValueError("time must be HH:MM in 24h format")
+        return v
+
+    @model_validator(mode="after")
+    def _check_order(self) -> "PreferredStudyWindow":
+        if _hhmm_to_minutes(self.start) >= _hhmm_to_minutes(self.end):
+            raise ValueError("start must be earlier than end")
+        return self
+
+
 class UserSettingsOut(BaseModel):
     notificationsEnabled: bool
     daysBeforeDeadline: int
     googleConnected: bool
     timezone: str | None = None
+    preferredStudyWindows: list[PreferredStudyWindow] = Field(default_factory=list)
+    autoScheduleSessions: bool = False
 
 
 class UserSettingsUpdate(BaseModel):
     notificationsEnabled: bool | None = None
     daysBeforeDeadline: int | None = Field(default=None, ge=1, le=14)
     timezone: str | None = Field(default=None, max_length=60)
+    preferredStudyWindows: list[PreferredStudyWindow] | None = Field(
+        default=None, max_length=4
+    )
+    autoScheduleSessions: bool | None = None

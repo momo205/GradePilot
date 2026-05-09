@@ -16,17 +16,22 @@ import {
   getGoogleCalendarInfo,
   getUserSettings,
   listDeadlines,
+  runReplanner,
   syncClassToGoogleCalendar,
   summariseDocument,
+  updateClassTimeline,
   updateDeadline,
+  updateUserSettings,
   uploadMaterialPdf,
   uploadMaterialText,
   type ClassAskOut,
   type ClassSummaryOut,
   type DeadlineOut,
   type MaterialIngestOut,
+  type MeetingPattern,
   type NotesOut,
   type PracticeQuestion,
+  type ScheduledSession,
   type StudyPlanOut,
   type SummariseOut,
 } from '@/lib/backend';
@@ -96,6 +101,27 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
   const [calendarSyncHint, setCalendarSyncHint] = useState<string | null>(null);
   const [calendarId, setCalendarId] = useState<string | null>(null);
 
+  const [autoSchedule, setAutoSchedule] = useState<boolean>(false);
+  const [savingAutoSchedule, setSavingAutoSchedule] = useState<boolean>(false);
+
+  const [meetingPatternDraft, setMeetingPatternDraft] =
+    useState<MeetingPattern>({
+      weekdays: [],
+      start_time: '14:00',
+      end_time: '15:30',
+    });
+  const [savingMeetingPattern, setSavingMeetingPattern] = useState(false);
+  const [meetingPatternHint, setMeetingPatternHint] = useState<string | null>(
+    null
+  );
+
+  const [lastScheduledSession, setLastScheduledSession] =
+    useState<ScheduledSession | null>(null);
+  const [autoSchedulingBusy, setAutoSchedulingBusy] = useState(false);
+  const [autoSchedulingHint, setAutoSchedulingHint] = useState<string | null>(
+    null
+  );
+
   const classTitle = summary?.clazz?.title ?? 'Class';
 
   useEffect(() => {
@@ -117,6 +143,14 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
         setNotes(n);
         setDeadlines(d);
         setGoogleConnected(settings.googleConnected);
+        setAutoSchedule(Boolean(settings.autoScheduleSessions));
+        if (s.clazz.meeting_pattern) {
+          setMeetingPatternDraft({
+            weekdays: s.clazz.meeting_pattern.weekdays ?? [],
+            start_time: s.clazz.meeting_pattern.start_time ?? '14:00',
+            end_time: s.clazz.meeting_pattern.end_time ?? '15:30',
+          });
+        }
         if (settings.googleConnected) {
           try {
             const info = await getGoogleCalendarInfo();
@@ -146,6 +180,72 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
       controller.abort();
     };
   }, [classId]);
+
+  async function persistAutoSchedule(next: boolean): Promise<void> {
+    setSavingAutoSchedule(true);
+    try {
+      const updated = await updateUserSettings({ autoScheduleSessions: next });
+      setAutoSchedule(Boolean(updated.autoScheduleSessions));
+    } catch (e: unknown) {
+      setError(
+        e instanceof Error ? e.message : 'Failed to save auto-schedule setting'
+      );
+    } finally {
+      setSavingAutoSchedule(false);
+    }
+  }
+
+  function explainSchedulingErrors(errors: string[]): string | null {
+    for (const e of errors) {
+      if (e.includes('skip:no_google_integration'))
+        return 'Connect Google Calendar from the Classes page to enable scheduling.';
+      if (e.includes('skip:insufficient_scopes'))
+        return 'Reconnect Google Calendar — required calendar permissions are missing.';
+      if (e.includes('skip:no_notes'))
+        return 'Add or upload notes for this class first.';
+      if (e.includes('skip:anchor_in_past'))
+        return 'No upcoming lecture or deadline to anchor against. Add a deadline or set a meeting pattern.';
+      if (e.includes('skip:no_slot_found'))
+        return 'No free 60-minute slot found before the next lecture/deadline. Try widening your preferred study windows.';
+      if (e.includes('schedule_study_session_'))
+        return 'Could not schedule a session. Try again, or check Google Calendar access.';
+    }
+    return null;
+  }
+
+  async function triggerScheduling(opts: { manual: boolean }): Promise<void> {
+    setAutoSchedulingBusy(true);
+    setAutoSchedulingHint(null);
+    try {
+      const result = await runReplanner(classId, {
+        trigger: opts.manual ? 'manual_replan' : 'notes_added',
+        force_schedule_session: opts.manual,
+      });
+      setLastScheduledSession(result.scheduled_session);
+      if (result.scheduled_session) {
+        setAutoSchedulingHint(null);
+        return;
+      }
+      const friendly = explainSchedulingErrors(result.errors ?? []);
+      if (friendly) {
+        setAutoSchedulingHint(friendly);
+      } else if (opts.manual) {
+        setAutoSchedulingHint(
+          'No session was scheduled. Check meeting pattern, deadlines, and preferred study windows.'
+        );
+      } else if (autoSchedule && googleConnected !== true) {
+        setAutoSchedulingHint(
+          'Auto-schedule is on but Google Calendar is not connected yet.'
+        );
+      }
+    } catch (e: unknown) {
+      setAutoSchedulingHint(
+        e instanceof Error ? e.message : 'Could not run smart scheduling.'
+      );
+    } finally {
+      setAutoSchedulingBusy(false);
+    }
+  }
 
   const upcomingDeadlines = useMemo(() => {
     const all = deadlines ?? [];
@@ -244,6 +344,202 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
                 )}
               </div>
             </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">
+                  Lecture meeting pattern
+                </div>
+                <p className="mt-1 text-sm text-slate-300 max-w-xl">
+                  Tell GradePilot when this class meets. Smart scheduling will
+                  use the next lecture as the deadline for your study session.
+                </p>
+              </div>
+              {meetingPatternHint ? (
+                <span className="text-xs text-emerald-400">
+                  {meetingPatternHint}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const).map(
+                (label, idx) => {
+                  const active = meetingPatternDraft.weekdays.includes(idx);
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => {
+                        setMeetingPatternDraft((p) => ({
+                          ...p,
+                          weekdays: active
+                            ? p.weekdays.filter((d) => d !== idx)
+                            : [...p.weekdays, idx].sort(),
+                        }));
+                      }}
+                      className={[
+                        'rounded-lg px-2.5 py-1 text-xs font-semibold border',
+                        active
+                          ? 'border-white/30 bg-white text-black'
+                          : 'border-white/15 bg-black/20 text-slate-200 hover:bg-white/[0.06]',
+                      ].join(' ')}
+                    >
+                      {label}
+                    </button>
+                  );
+                }
+              )}
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-300">
+              <span>From</span>
+              <input
+                value={meetingPatternDraft.start_time}
+                onChange={(e) =>
+                  setMeetingPatternDraft((p) => ({
+                    ...p,
+                    start_time: e.target.value,
+                  }))
+                }
+                placeholder="14:00"
+                className="w-20 bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-sm text-white"
+              />
+              <span>to</span>
+              <input
+                value={meetingPatternDraft.end_time}
+                onChange={(e) =>
+                  setMeetingPatternDraft((p) => ({
+                    ...p,
+                    end_time: e.target.value,
+                  }))
+                }
+                placeholder="15:30"
+                className="w-20 bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-sm text-white"
+              />
+              <button
+                type="button"
+                disabled={
+                  savingMeetingPattern ||
+                  meetingPatternDraft.weekdays.length === 0
+                }
+                onClick={async () => {
+                  setSavingMeetingPattern(true);
+                  setMeetingPatternHint(null);
+                  setError(null);
+                  try {
+                    await updateClassTimeline(classId, {
+                      meeting_pattern: meetingPatternDraft,
+                    });
+                    setMeetingPatternHint('Saved.');
+                  } catch (e: unknown) {
+                    setError(
+                      e instanceof Error ? e.message : 'Failed to save pattern'
+                    );
+                  } finally {
+                    setSavingMeetingPattern(false);
+                  }
+                }}
+                className="ml-1 rounded-xl bg-white text-black px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+              >
+                {savingMeetingPattern ? 'Saving…' : 'Save pattern'}
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">
+                  Study session
+                </div>
+                <p className="mt-1 text-sm text-slate-300 max-w-xl">
+                  Books a 60-minute focused-study event on your GradePilot
+                  Google calendar before your next lecture or deadline.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={autoSchedulingBusy || googleConnected !== true}
+                onClick={() => triggerScheduling({ manual: true })}
+                className="rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                {autoSchedulingBusy ? 'Scheduling…' : 'Schedule study session now'}
+              </button>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+              <label className="inline-flex items-center gap-2 text-sm text-white">
+                <input
+                  type="checkbox"
+                  checked={autoSchedule}
+                  disabled={
+                    savingAutoSchedule || googleConnected !== true
+                  }
+                  onChange={(e) => persistAutoSchedule(e.target.checked)}
+                />
+                Auto-schedule on every notes upload
+              </label>
+              {googleConnected !== true ? (
+                <span className="text-xs text-amber-200/90">
+                  Connect Google from{' '}
+                  <Link href="/classes" className="underline hover:text-white">
+                    Classes
+                  </Link>{' '}
+                  first.
+                </span>
+              ) : (
+                <Link
+                  href="/classes"
+                  className="ml-auto text-xs text-slate-300 hover:text-white underline"
+                >
+                  Edit preferred study windows →
+                </Link>
+              )}
+            </div>
+
+            {lastScheduledSession ? (
+              <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-sm font-semibold text-white">
+                  {new Date(lastScheduledSession.start).toLocaleString()} →{' '}
+                  {new Date(lastScheduledSession.end).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </div>
+                <div className="mt-1 text-xs text-slate-300">
+                  Anchor:{' '}
+                  {lastScheduledSession.anchor_kind.replace('_', ' ')}
+                  {lastScheduledSession.in_preferred_window
+                    ? ' · in your preferred window'
+                    : ' · outside your preferred windows (best slot available)'}
+                </div>
+                {lastScheduledSession.calendar_event_link ? (
+                  <a
+                    href={lastScheduledSession.calendar_event_link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-block text-xs text-slate-200 hover:text-white underline"
+                  >
+                    Open in Google Calendar
+                  </a>
+                ) : null}
+              </div>
+            ) : (
+              <div className="mt-3 text-sm text-slate-300">
+                No session booked yet. Click <em>Schedule study session now</em>,
+                or enable auto-schedule on the Classes page so it runs after
+                every notes upload.
+              </div>
+            )}
+
+            {autoSchedulingHint ? (
+              <p className="mt-2 text-xs text-amber-200/90">
+                {autoSchedulingHint}
+              </p>
+            ) : null}
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -471,6 +767,7 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
                 const created = await addNotes(classId, text.trim());
                 setNotes((prev) => [created, ...(prev ?? [])]);
                 setNotesDraft('');
+                void triggerScheduling({ manual: false });
               } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : 'Failed to upload notes');
               } finally {
@@ -502,6 +799,7 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
                 setNotesDraft('');
                 setNotesSummary(null);
                 setLastUpload(null);
+                void triggerScheduling({ manual: false });
               } catch (e: unknown) {
                 setError(e instanceof Error ? e.message : 'Failed to save notes');
               } finally {
@@ -580,6 +878,9 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
                 const latestNotesId = notes?.[0]?.id;
                 const created = await createStudyPlan(classId, latestNotesId);
                 setPlan(created);
+                if (autoSchedule) {
+                  void triggerScheduling({ manual: false });
+                }
               } catch (e: unknown) {
                 setError(e instanceof Error ? e.message : 'Failed to generate plan');
               } finally {

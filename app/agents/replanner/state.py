@@ -18,6 +18,10 @@ class ReplannerState(TypedDict):
     dry_run: bool
     force_replan: bool
     sync_calendar_override: Optional[bool]  # None = use user_settings
+    # When True, ``schedule_study_session`` runs even if the user's
+    # ``auto_schedule_sessions`` flag is False and even if the trigger is not
+    # ``notes_added`` (e.g. the user clicked a manual "Schedule now" button).
+    force_schedule_session: bool
 
     # Loaded context (filled by load_context node)
     class_data: Optional[dict[str, Any]]
@@ -37,6 +41,11 @@ class ReplannerState(TypedDict):
     new_plan_id: Optional[str]
     calendar_sync_result: Optional[dict[str, Any]]
     completed_tasks_carried: Optional[list[Any]]
+    # Set by schedule_study_session on notes_added when auto-scheduling is on.
+    # Shape: {"start": iso, "end": iso, "in_preferred_window": bool,
+    #         "calendar_event_link": str} or None when nothing was scheduled
+    # (skipped, no slot found, or failed -- failures also push to errors).
+    scheduled_session: Optional[dict[str, Any]]
 
     # Status
     errors: list[str]

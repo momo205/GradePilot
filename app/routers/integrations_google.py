@@ -14,15 +14,13 @@ from app.db.session import get_db
 from app.deps.auth import CurrentUser, get_current_user
 from app.schemas import DeadlineImportOut
 from app.services.google_calendar import (
+    SCOPES,
     build_google_credentials_for_calendar,
     get_or_create_gradepilot_calendar,
     upsert_deadline_event,
 )
 
 router = APIRouter(prefix="/integrations/google", tags=["integrations"])
-
-
-SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 # In-memory store for PKCE verifier keyed by OAuth state.
 # Keeps the auth flow working without adding persistence/migrations.

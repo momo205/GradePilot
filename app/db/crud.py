@@ -53,6 +53,7 @@ def update_class_timeline(
     semester_end: str | None = None,
     timezone: str | None = None,
     availability_json: dict[str, Any] | None = None,
+    meeting_pattern: dict[str, Any] | None = None,
 ) -> Class | None:
     clazz = get_class(db=db, user_id=user_id, class_id=class_id)
     if clazz is None:
@@ -65,6 +66,8 @@ def update_class_timeline(
         clazz.timezone = timezone
     if availability_json is not None:
         clazz.availability_json = availability_json
+    if meeting_pattern is not None:
+        clazz.meeting_pattern = meeting_pattern
     db.add(clazz)
     db.commit()
     db.refresh(clazz)
@@ -536,6 +539,8 @@ def upsert_user_settings(
     notifications_enabled: bool | None = None,
     days_before_deadline: int | None = None,
     timezone: str | None = None,
+    preferred_study_windows: list[dict[str, str]] | None = None,
+    auto_schedule_sessions: bool | None = None,
 ) -> UserSettings:
     existing = get_user_settings(db=db, user_id=user_id)
     if existing is None:
@@ -548,6 +553,12 @@ def upsert_user_settings(
                 days_before_deadline if days_before_deadline is not None else 3
             ),
             timezone=timezone,
+            preferred_study_windows=(
+                preferred_study_windows if preferred_study_windows is not None else []
+            ),
+            auto_schedule_sessions=(
+                auto_schedule_sessions if auto_schedule_sessions is not None else False
+            ),
         )
         db.add(existing)
         db.commit()
@@ -560,6 +571,10 @@ def upsert_user_settings(
         existing.days_before_deadline = days_before_deadline
     if timezone is not None:
         existing.timezone = timezone
+    if preferred_study_windows is not None:
+        existing.preferred_study_windows = preferred_study_windows
+    if auto_schedule_sessions is not None:
+        existing.auto_schedule_sessions = auto_schedule_sessions
     db.add(existing)
     db.commit()
     db.refresh(existing)

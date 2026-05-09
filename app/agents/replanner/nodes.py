@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -11,6 +12,8 @@ from app.core.config import get_settings
 from app.db import crud
 from app.db.session import get_engine
 from app.services.study_plan_semester import generate_semester_study_plan
+
+logger = logging.getLogger("gradepilot.replanner")
 
 
 def _utc_iso(dt: datetime | None) -> str | None:
@@ -153,6 +156,14 @@ def load_context(state: ReplannerState) -> ReplannerState:
                 "notifications_enabled": user_settings.notifications_enabled,
                 "days_before_deadline": user_settings.days_before_deadline,
                 "timezone": user_settings.timezone,
+                # Additive: used by schedule_study_session. The existing
+                # auto_sync_calendar key (read by graph.should_sync_calendar)
+                # is intentionally NOT added here -- that gate continues to
+                # rely on sync_calendar_override exactly as before.
+                "auto_schedule_sessions": bool(user_settings.auto_schedule_sessions),
+                "preferred_study_windows": list(
+                    user_settings.preferred_study_windows or []
+                ),
             }
             if user_settings is not None
             else {}
@@ -387,6 +398,196 @@ def sync_calendar(state: ReplannerState) -> ReplannerState:
         state["calendar_sync_result"] = res
     except Exception as e:  # noqa: BLE001
         state["errors"].append(f"sync_calendar_failed:{e.__class__.__name__}")
+    finally:
+        db.close()
+    return state
+
+
+def schedule_study_session(state: ReplannerState) -> ReplannerState:
+    """Auto-pick a 60-min slot in the user's calendar and create the event.
+
+    Only runs on ``notes_added`` triggers and only when the user has opted in
+    via ``user_settings.auto_schedule_sessions``. All failure modes (missing
+    integration, insufficient scopes, no slot available, Google API error)
+    push to ``state["errors"]`` rather than raising.
+    """
+    forced = bool(state.get("force_schedule_session", False))
+    if state.get("trigger") != "notes_added" and not forced:
+        return state
+    if state.get("dry_run", False):
+        return state
+
+    settings_dict = state.get("user_settings") or {}
+    if not forced and not bool(settings_dict.get("auto_schedule_sessions", False)):
+        return state
+
+    if not state.get("has_google_integration", False):
+        logger.info("schedule_study_session: skipped (no google integration)")
+        if forced:
+            state["errors"].append("schedule_study_session_skip:no_google_integration")
+        return state
+
+    notes_list = state.get("notes") or []
+    if not notes_list:
+        logger.info("schedule_study_session: skipped (no notes in state)")
+        if forced:
+            state["errors"].append("schedule_study_session_skip:no_notes")
+        return state
+    latest_note = notes_list[0]
+    if not isinstance(latest_note, dict) or not isinstance(latest_note.get("id"), str):
+        return state
+
+    class_data = state.get("class_data")
+    if not isinstance(class_data, dict):
+        return state
+
+    user_tz = settings_dict.get("timezone") or class_data.get("timezone") or "UTC"
+    if not isinstance(user_tz, str) or not user_tz.strip():
+        user_tz = "UTC"
+
+    preferred_windows_raw = settings_dict.get("preferred_study_windows") or []
+    preferred_windows: list[dict[str, str]] = [
+        w
+        for w in preferred_windows_raw
+        if isinstance(w, dict)
+        and isinstance(w.get("start"), str)
+        and isinstance(w.get("end"), str)
+    ]
+
+    # Local imports keep the graph importable even when scheduling deps fail
+    # to import for any reason (e.g. zoneinfo data missing in a stripped image).
+    try:
+        from app.services.google_calendar import (
+            create_study_session_event,
+            has_required_scopes,
+            list_busy_blocks,
+        )
+        from app.services.scheduling.anchors import compute_next_anchor
+        from app.services.scheduling.slot_finder import find_first_available_slot
+    except Exception as e:  # noqa: BLE001
+        state["errors"].append(
+            f"schedule_study_session_import_failed:{e.__class__.__name__}"
+        )
+        return state
+
+    db = _make_session()
+    try:
+        try:
+            user_uuid = uuid.UUID(state["user_id"])
+            class_uuid = uuid.UUID(state["class_id"])
+            notes_uuid = uuid.UUID(latest_note["id"])
+        except (KeyError, ValueError):
+            state["errors"].append("schedule_study_session_invalid_ids")
+            return state
+
+        integ = crud.get_google_integration(db=db, user_id=user_uuid)
+        if integ is None:
+            logger.info("schedule_study_session: skipped (no google integration in DB)")
+            if forced:
+                state["errors"].append(
+                    "schedule_study_session_skip:no_google_integration"
+                )
+            return state
+        if not has_required_scopes(integ):
+            logger.info(
+                "schedule_study_session: skipped (insufficient scopes; "
+                "user must reconnect Google)"
+            )
+            if forced:
+                state["errors"].append(
+                    "schedule_study_session_skip:insufficient_scopes"
+                )
+            return state
+
+        now = datetime.now(timezone.utc)
+
+        try:
+            anchor = compute_next_anchor(
+                class_data=class_data,
+                deadlines=[
+                    d for d in (state.get("deadlines") or []) if isinstance(d, dict)
+                ],
+                from_dt=now,
+            )
+        except Exception as e:  # noqa: BLE001
+            state["errors"].append(
+                f"schedule_study_session_anchor_failed:{e.__class__.__name__}"
+            )
+            return state
+
+        if anchor.at <= now:
+            logger.info("schedule_study_session: anchor in the past; nothing to do")
+            if forced:
+                state["errors"].append("schedule_study_session_skip:anchor_in_past")
+            return state
+
+        try:
+            busy_blocks = list_busy_blocks(
+                db=db,
+                user_id=str(user_uuid),
+                start=now,
+                end=anchor.at,
+            )
+        except Exception as e:  # noqa: BLE001
+            state["errors"].append(
+                f"schedule_study_session_busy_failed:{e.__class__.__name__}"
+            )
+            return state
+
+        try:
+            slot = find_first_available_slot(
+                busy_blocks=busy_blocks,
+                preferred_windows=preferred_windows,
+                user_timezone=user_tz,
+                search_start=now,
+                search_end=anchor.at,
+            )
+        except Exception as e:  # noqa: BLE001
+            state["errors"].append(
+                f"schedule_study_session_slot_failed:{e.__class__.__name__}"
+            )
+            return state
+
+        if slot is None:
+            logger.info(
+                "schedule_study_session: no slot found before anchor=%s",
+                anchor.at.isoformat(),
+            )
+            if forced:
+                state["errors"].append("schedule_study_session_skip:no_slot_found")
+            return state
+
+        title = f"Study: {class_data.get('title') or 'class'}"
+        description = (
+            f"Anchor: {anchor.kind} at {anchor.at.isoformat()}.\n"
+            "Created on the GradePilot calendar; safe to move or delete."
+        )
+
+        try:
+            event = create_study_session_event(
+                db=db,
+                user_id=str(user_uuid),
+                class_id=class_uuid,
+                notes_id=notes_uuid,
+                title=title,
+                start=slot.start,
+                end=slot.end,
+                description=description,
+            )
+        except Exception as e:  # noqa: BLE001
+            state["errors"].append(
+                f"schedule_study_session_create_failed:{e.__class__.__name__}"
+            )
+            return state
+
+        state["scheduled_session"] = {
+            "start": slot.start.isoformat(),
+            "end": slot.end.isoformat(),
+            "in_preferred_window": slot.in_preferred_window,
+            "calendar_event_link": event.get("html_link", ""),
+            "calendar_event_id": event.get("event_id", ""),
+            "anchor_kind": anchor.kind,
+        }
     finally:
         db.close()
     return state

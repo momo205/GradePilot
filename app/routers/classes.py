@@ -149,6 +149,9 @@ def update_class_timeline_endpoint(
         if payload.availability is not None
         else None
     )
+    meeting_pattern = (
+        payload.meeting_pattern.model_dump() if payload.meeting_pattern else None
+    )
     updated = crud.update_class_timeline(
         db=db,
         user_id=user_id,
@@ -159,6 +162,7 @@ def update_class_timeline_endpoint(
         availability_json=(
             {"blocks": availability_json} if availability_json is not None else None
         ),
+        meeting_pattern=meeting_pattern,
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Class not found")
