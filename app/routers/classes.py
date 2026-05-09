@@ -45,9 +45,6 @@ from app.services.practice import (
     PracticeRateLimitError,
     generate_practice_questions,
 )
-
-# Per-lecture cap when building the practice prompt (avoids huge uploads).
-_PRACTICE_NOTE_MAX_CHARS = 8000
 from app.services.scheduling.anchors import compute_next_anchor
 from app.services.scheduling.plan_sessions import schedule_plan_day_sessions
 from app.services.study_plan import (
@@ -60,6 +57,9 @@ from app.services.study_plan_semester import (
     SemesterStudyPlanRateLimitError,
     generate_semester_study_plan,
 )
+
+# Per-lecture cap when building the practice prompt (avoids huge uploads).
+_PRACTICE_NOTE_MAX_CHARS = 8000
 
 router = APIRouter(prefix="/classes", tags=["classes"])
 
