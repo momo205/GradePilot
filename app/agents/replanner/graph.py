@@ -17,8 +17,6 @@ from app.agents.replanner.nodes import (
 from app.agents.replanner.state import ReplannerState
 from app.core.config import get_settings
 
-_PostgresSaver: Any | None
-
 try:
     # Provided by `langgraph-checkpoint-postgres`.
     from langgraph.checkpoint.postgres import PostgresSaver as _PostgresSaver

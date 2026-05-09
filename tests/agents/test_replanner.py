@@ -17,6 +17,13 @@ from app.deps.auth import CurrentUser, get_current_user
 from app.main import app
 
 
+class ReplannerTestClient(TestClient):  # type: ignore[misc]
+    """TestClient with session factory and user id attached for replanner API tests."""
+
+    SessionLocal: sessionmaker[Session]
+    user_uuid: uuid.UUID
+
+
 def _override_sqlite_db(*, url: str) -> tuple[sessionmaker[Session], Any]:
     engine = create_engine(
         url,
@@ -101,7 +108,7 @@ def _seed_plan(
 @pytest.fixture()
 def client(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Any
-) -> Generator[TestClient, None, None]:
+) -> Generator[ReplannerTestClient, None, None]:
     # Required envs for app.core.config.get_settings()
     monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
     db_path = tmp_path / "replanner_test.db"
@@ -136,17 +143,17 @@ def client(
         nodes_mod, "generate_semester_study_plan", _fake_generate_semester_study_plan
     )
 
-    with TestClient(app) as c:
-        c.SessionLocal = SessionLocal  # type: ignore[attr-defined]
-        c.user_uuid = user_uuid  # type: ignore[attr-defined]
+    with ReplannerTestClient(app) as c:
+        c.SessionLocal = SessionLocal
+        c.user_uuid = user_uuid
         yield c
 
     app.dependency_overrides.clear()
 
 
-def test_gate_skips_when_no_material_change(client: TestClient) -> None:
-    db: Session = client.SessionLocal()  # type: ignore[attr-defined]
-    user_id = client.user_uuid  # type: ignore[attr-defined]
+def test_gate_skips_when_no_material_change(client: ReplannerTestClient) -> None:
+    db: Session = client.SessionLocal()
+    user_id = client.user_uuid
     class_id = _seed_class(db=db, user_id=user_id)
 
     d = crud.create_deadline(
@@ -165,9 +172,9 @@ def test_gate_skips_when_no_material_change(client: TestClient) -> None:
     assert body["replan_reason"] == "no_material_change"
 
 
-def test_gate_triggers_on_new_deadline(client: TestClient) -> None:
-    db: Session = client.SessionLocal()  # type: ignore[attr-defined]
-    user_id = client.user_uuid  # type: ignore[attr-defined]
+def test_gate_triggers_on_new_deadline(client: ReplannerTestClient) -> None:
+    db: Session = client.SessionLocal()
+    user_id = client.user_uuid
     class_id = _seed_class(db=db, user_id=user_id)
 
     d1 = crud.create_deadline(
@@ -191,9 +198,9 @@ def test_gate_triggers_on_new_deadline(client: TestClient) -> None:
     assert "new_deadlines" in str(body["replan_reason"])
 
 
-def test_dry_run_does_not_persist(client: TestClient) -> None:
-    db: Session = client.SessionLocal()  # type: ignore[attr-defined]
-    user_id = client.user_uuid  # type: ignore[attr-defined]
+def test_dry_run_does_not_persist(client: ReplannerTestClient) -> None:
+    db: Session = client.SessionLocal()
+    user_id = client.user_uuid
     class_id = _seed_class(db=db, user_id=user_id)
 
     before = db.execute(select(StudyPlan)).scalars().all()
@@ -206,15 +213,15 @@ def test_dry_run_does_not_persist(client: TestClient) -> None:
     )
     assert resp.status_code == 200
 
-    db2: Session = client.SessionLocal()  # type: ignore[attr-defined]
+    db2: Session = client.SessionLocal()
     after = db2.execute(select(StudyPlan)).scalars().all()
     db2.close()
     assert len(after) == 0
 
 
-def test_completed_tasks_carry_forward(client: TestClient) -> None:
-    db: Session = client.SessionLocal()  # type: ignore[attr-defined]
-    user_id = client.user_uuid  # type: ignore[attr-defined]
+def test_completed_tasks_carry_forward(client: ReplannerTestClient) -> None:
+    db: Session = client.SessionLocal()
+    user_id = client.user_uuid
     class_id = _seed_class(db=db, user_id=user_id)
 
     d = crud.create_deadline(
@@ -239,9 +246,11 @@ def test_completed_tasks_carry_forward(client: TestClient) -> None:
     assert body["new_plan"]["completed_tasks"] == ["t1", "t2"]
 
 
-def test_calendar_sync_skipped_without_integration(client: TestClient) -> None:
-    db: Session = client.SessionLocal()  # type: ignore[attr-defined]
-    user_id = client.user_uuid  # type: ignore[attr-defined]
+def test_calendar_sync_skipped_without_integration(
+    client: ReplannerTestClient,
+) -> None:
+    db: Session = client.SessionLocal()
+    user_id = client.user_uuid
     class_id = _seed_class(db=db, user_id=user_id)
     db.close()
 

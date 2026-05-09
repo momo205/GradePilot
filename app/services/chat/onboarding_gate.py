@@ -106,10 +106,12 @@ def run_onboarding_gate(
     if phase == 1:
         title = _get_str(msg_json, "class_title")
         if title:
-            tool_actions.append({"type": "create_class", "payload": {"title": title[:200]}})
+            tool_actions.append(
+                {"type": "create_class", "payload": {"title": title[:200]}}
+            )
             st["phase"] = 2
             return (
-                f'Got it. **{title[:200]}**.\n\n'
+                f"Got it. **{title[:200]}**.\n\n"
                 "Next: send your semester timeline as either:\n"
                 "- `timezone=America/New_York; start=YYYY-MM-DD; end=YYYY-MM-DD` or\n"
                 '- JSON: `{"timezone":"...","semester_start":"...","semester_end":"..."}`',
@@ -146,7 +148,7 @@ def run_onboarding_gate(
         return (
             "Send your semester timeline:\n"
             "`timezone=America/New_York; start=YYYY-MM-DD; end=YYYY-MM-DD`\n"
-            "or JSON: `{\"timezone\":\"...\",\"semester_start\":\"...\",\"semester_end\":\"...\"}`",
+            'or JSON: `{"timezone":"...","semester_start":"...","semester_end":"..."}`',
             st,
             tool_actions,
         )
@@ -177,9 +179,16 @@ def run_onboarding_gate(
             due = _get_str(deadline, "due")
             if title and due:
                 tool_actions.append(
-                    {"type": "create_deadline", "payload": {"title": title, "due_text": due}}
+                    {
+                        "type": "create_deadline",
+                        "payload": {"title": title, "due_text": due},
+                    }
                 )
-                return ("Added. Add another, or click **Done with deadlines**.", st, tool_actions)
+                return (
+                    "Added. Add another, or click **Done with deadlines**.",
+                    st,
+                    tool_actions,
+                )
 
         return (
             "Upload your **syllabus PDF** to import deadlines, or add one manually.\n"

@@ -36,7 +36,9 @@ def _user_uuid(user: CurrentUser) -> uuid.UUID:
 
 @router.post("/sessions", response_model=ChatSessionOut)
 def create_or_get_session(
-    force_new: bool = Query(False, description="If true, always start a new onboarding session."),
+    force_new: bool = Query(
+        False, description="If true, always start a new onboarding session."
+    ),
     user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ChatSessionOut:

@@ -77,6 +77,7 @@ def live_app_settings(_live_gemini_gate: None) -> object:
         return get_settings()
     except RuntimeError as e:
         pytest.skip(f"Full app environment required for get_settings(): {e}")
+    raise AssertionError("unreachable")  # pytest.skip always raises; for mypy
 
 
 def _friendly_api_error(e: ClientError) -> str:
@@ -135,7 +136,7 @@ def test_gemini_embed_content_connection(_live_gemini_gate: None) -> None:
     assert all(isinstance(x, (int, float)) for x in values)
 
 
-def test_app_embed_query_matches_live_stack(live_app_settings) -> None:
+def test_app_embed_query_matches_live_stack(live_app_settings: object) -> None:
     """Uses ``app.services.rag.embeddings.embed_query`` (requires full app ``Settings``)."""
     from app.services.rag.embeddings import EmbeddingsError, embed_query
 
@@ -148,7 +149,9 @@ def test_app_embed_query_matches_live_stack(live_app_settings) -> None:
     assert isinstance(vec, list) and len(vec) == _EMBEDDING_DIM
 
 
-def test_app_generate_study_plan_matches_live_stack(live_app_settings) -> None:
+def test_app_generate_study_plan_matches_live_stack(
+    live_app_settings: object,
+) -> None:
     """Uses ``generate_study_plan`` — JSON + schema validation path."""
     from app.services.study_plan import StudyPlanGenerationError, generate_study_plan
 
