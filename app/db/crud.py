@@ -330,6 +330,25 @@ def get_active_chat_session(*, db: Session, user_id: uuid.UUID) -> ChatSession |
     return db.execute(stmt).scalar_one_or_none()
 
 
+def archive_active_chat_sessions(*, db: Session, user_id: uuid.UUID) -> int:
+    """
+    Mark all active chat sessions for this user as archived.
+
+    Returns the number of sessions updated.
+    """
+    stmt = select(ChatSession).where(
+        ChatSession.user_id == user_id, ChatSession.status == "active"
+    )
+    sessions = list(db.execute(stmt).scalars().all())
+    if not sessions:
+        return 0
+    for s in sessions:
+        s.status = "archived"
+        db.add(s)
+    db.commit()
+    return len(sessions)
+
+
 def create_chat_session(*, db: Session, user_id: uuid.UUID) -> ChatSession:
     session = ChatSession(user_id=user_id, status="active")
     db.add(session)

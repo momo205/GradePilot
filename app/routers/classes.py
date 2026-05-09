@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from app.agents.replanner.graph import ReplannerInput, Trigger, run_replanner
 from app.db import crud
 from app.db.session import get_db
 from app.deps.auth import CurrentUser, get_current_user
@@ -50,6 +52,32 @@ from app.services.study_plan_semester import (
 )
 
 router = APIRouter(prefix="/classes", tags=["classes"])
+
+logger = logging.getLogger("gradepilot.classes")
+
+
+async def _fire_replanner_after_write(
+    *,
+    user: CurrentUser,
+    class_id: uuid.UUID,
+    trigger: Trigger,
+) -> None:
+    """Best-effort replan after a mutating write; failures are logged, not raised."""
+    thread_id = f"{user.user_id}:{class_id}"
+    inp: ReplannerInput = {
+        "user_id": user.user_id,
+        "class_id": str(class_id),
+        "trigger": trigger,
+        "dry_run": False,
+        "force_replan": False,
+        "sync_calendar_override": None,
+    }
+    try:
+        await run_replanner(inp, thread_id=thread_id)
+    except Exception:
+        logger.exception(
+            "replanner_hook_failed class_id=%s trigger=%s", class_id, trigger
+        )
 
 
 def _user_uuid(user: CurrentUser) -> uuid.UUID:
@@ -151,7 +179,7 @@ def list_notes(
 
 
 @router.post("/{class_id}/notes", response_model=NotesOut)
-def add_notes(
+async def add_notes(
     class_id: uuid.UUID,
     payload: NotesCreate,
     user: CurrentUser = Depends(get_current_user),
@@ -164,6 +192,9 @@ def add_notes(
 
     notes = crud.create_notes(
         db=db, user_id=user_id, class_id=class_id, notes_text=payload.notes_text
+    )
+    await _fire_replanner_after_write(
+        user=user, class_id=class_id, trigger="notes_added"
     )
     return NotesOut.model_validate(notes)
 
@@ -356,7 +387,7 @@ def list_deadlines_endpoint(
 
 
 @router.post("/{class_id}/deadlines", response_model=DeadlineOut)
-def create_deadline_endpoint(
+async def create_deadline_endpoint(
     class_id: uuid.UUID,
     payload: DeadlineCreate,
     user: CurrentUser = Depends(get_current_user),
@@ -372,6 +403,9 @@ def create_deadline_endpoint(
         class_id=class_id,
         title=payload.title,
         due_text=payload.due,
+    )
+    await _fire_replanner_after_write(
+        user=user, class_id=class_id, trigger="deadline_added"
     )
     return DeadlineOut.model_validate(created)
 
@@ -459,7 +493,8 @@ async def import_deadlines_from_syllabus_endpoint(
             headers["Retry-After"] = str(e.retry_after_seconds)
         raise HTTPException(status_code=429, detail=str(e), headers=headers)
     except DeadlineExtractError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        status_code = int(getattr(e, "status_code", 502) or 502)
+        raise HTTPException(status_code=status_code, detail=str(e))
 
     created = 0
     for d in extracted:
@@ -472,5 +507,10 @@ async def import_deadlines_from_syllabus_endpoint(
             due_at=d.due_at,
         )
         created += 1
+
+    if created > 0:
+        await _fire_replanner_after_write(
+            user=user, class_id=class_id, trigger="deadline_imported"
+        )
 
     return DeadlineImportOut(created=created)

@@ -36,7 +36,10 @@ export default function ClassesIndexClient() {
       subtitle="Your current classes. Add a new one via the onboarding chat."
       actions={
         <div className="flex items-center gap-4">
-          <Link href="/chat" className="text-sm text-slate-300 hover:text-white transition-colors">
+          <Link
+            href="/chat?new=1"
+            className="text-sm text-slate-300 hover:text-white transition-colors"
+          >
             Add New Class
           </Link>
           <button
@@ -66,7 +69,10 @@ export default function ClassesIndexClient() {
             Start onboarding to add your first class.
           </div>
           <div className="mt-4">
-            <Link href="/chat" className="rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold">
+            <Link
+              href="/chat?new=1"
+              className="rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold"
+            >
               Start onboarding
             </Link>
           </div>

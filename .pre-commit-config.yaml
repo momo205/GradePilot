@@ -19,5 +19,7 @@ repos:
           - pydantic
           - sqlalchemy
           - types-python-dateutil
+          - fastapi
+          - httpx
         args: []
 

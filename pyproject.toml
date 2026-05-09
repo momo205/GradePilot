@@ -15,6 +15,7 @@ dependencies = [
   "python-jose[cryptography]",
   "langchain",
   "langgraph",
+  "langgraph-checkpoint-postgres",
   "google-genai",
   "pypdf",
 
@@ -61,4 +62,7 @@ disallow_untyped_decorators = false
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+markers = [
+  "integration: exercises live external services (set RUN_LIVE_GEMINI_TESTS=1 where applicable)",
+]
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   createOrGetChatSession,
   getChatSession,
@@ -30,6 +30,7 @@ function toolActionToCard(a: ChatToolAction): ToolCard | null {
 export default function ChatClient() {
   const supabase = createClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,12 +72,15 @@ export default function ChatClient() {
       setLoading(true);
       setError(null);
       try {
-        const sess = await createOrGetChatSession();
+        const forceNew =
+          searchParams?.get('new') === '1' || searchParams?.get('new') === 'true';
+        const sess = await createOrGetChatSession({ forceNew });
         if (cancelled) return;
         setSessionId(sess.id);
         const reply = await getChatSession(sess.id);
         if (cancelled) return;
         setChat(reply);
+        setToolCards([]);
       } catch (e: unknown) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : 'Failed to load chat');
@@ -87,7 +91,7 @@ export default function ChatClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     if (chat?.complete && chat.class_id) {
