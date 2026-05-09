@@ -42,6 +42,7 @@ import { NotesPanel } from '@/components/study-plan/NotesPanel';
 import { PracticePanel } from '@/components/study-plan/PracticePanel';
 import { RagPanel } from '@/components/study-plan/RagPanel';
 import { PlanPanel } from '@/components/study-plan/PlanPanel';
+import { GradeBookPanel } from '@/components/study-plan/GradeBookPanel';
 
 type Tab = 'overview' | 'deadlines' | 'notes' | 'practice';
 
@@ -193,6 +194,22 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
       controller.abort();
     };
   }, [classId]);
+
+  useEffect(() => {
+    if (tab !== 'overview') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await getClassSummary(classId);
+        if (!cancelled) setSummary(s);
+      } catch {
+        /* keep existing summary on refresh failure */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, classId]);
 
   async function persistAutoSchedule(next: boolean): Promise<void> {
     setSavingAutoSchedule(true);
@@ -366,6 +383,18 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
               </div>
             </div>
           </div>
+
+          <GradeBookPanel
+            classId={classId}
+            gradeBook={summary?.clazz.grade_book ?? null}
+            hasIndexedSyllabus={summary?.has_indexed_syllabus ?? false}
+            onOpenNotesTab={() => setTab('notes')}
+            onSaved={(g) => {
+              setSummary((s) =>
+                s ? { ...s, clazz: { ...s.clazz, grade_book: g } } : s
+              );
+            }}
+          />
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">

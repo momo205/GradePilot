@@ -71,6 +71,7 @@ def test_classes_create_list_and_summary(client: TestClient) -> None:
     payload = r.json()
     assert payload["clazz"]["id"] == class_id
     assert payload["deadline_count"] == 0
+    assert payload.get("has_indexed_syllabus") is False
 
 
 def test_chat_session_create_get_and_post_message_creates_classes(
