@@ -436,7 +436,8 @@ def test_summarise_and_google_routes_smoke(
 
     r = client.post(
         f"/classes/{class_id}/deadlines",
-        json={"title": "HW", "due": "tomorrow"},
+        # Calendar sync skips deadlines without a parsed due_at; "tomorrow" is not parsed.
+        json={"title": "HW", "due": "2026-05-10"},
     )
     assert r.status_code == 200
 
