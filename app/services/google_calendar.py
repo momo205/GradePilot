@@ -93,6 +93,29 @@ def get_or_create_gradepilot_calendar(*, creds: Credentials) -> str:
     return str(created.get("id"))
 
 
+def get_primary_calendar_id(*, creds: Credentials) -> str | None:
+    """Return the user's primary Google calendar id (their account email).
+
+    Used to overlay the user's personal calendar on top of the GradePilot
+    calendar in the embedded view. Returns ``None`` if the API call fails or
+    no entry is flagged as primary.
+    """
+    try:
+        svc = build("calendar", "v3", credentials=creds, cache_discovery=False)
+        page_token: str | None = None
+        while True:
+            resp = svc.calendarList().list(pageToken=page_token).execute()
+            for item in resp.get("items", []):
+                if item.get("primary") is True:
+                    raw_id = item.get("id")
+                    return str(raw_id) if raw_id else None
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def upsert_deadline_event(
     *,
     creds: Credentials,

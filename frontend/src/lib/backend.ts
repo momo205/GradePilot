@@ -309,6 +309,7 @@ export function syncClassToGoogleCalendar(classId: string) {
 
 export type GoogleCalendarInfoOut = {
   calendar_id: string;
+  primary_calendar_id?: string | null;
 };
 
 export function getGoogleCalendarInfo() {

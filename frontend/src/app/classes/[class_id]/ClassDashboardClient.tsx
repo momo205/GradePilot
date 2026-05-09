@@ -100,6 +100,9 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
   const [googleSyncBusy, setGoogleSyncBusy] = useState(false);
   const [calendarSyncHint, setCalendarSyncHint] = useState<string | null>(null);
   const [calendarId, setCalendarId] = useState<string | null>(null);
+  const [primaryCalendarId, setPrimaryCalendarId] = useState<string | null>(
+    null
+  );
 
   const [autoSchedule, setAutoSchedule] = useState<boolean>(false);
   const [savingAutoSchedule, setSavingAutoSchedule] = useState<boolean>(false);
@@ -154,13 +157,20 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
         if (settings.googleConnected) {
           try {
             const info = await getGoogleCalendarInfo();
-            if (!cancelled) setCalendarId(info.calendar_id);
+            if (!cancelled) {
+              setCalendarId(info.calendar_id);
+              setPrimaryCalendarId(info.primary_calendar_id ?? null);
+            }
           } catch {
             // Calendar embed is optional; ignore failures.
-            if (!cancelled) setCalendarId(null);
+            if (!cancelled) {
+              setCalendarId(null);
+              setPrimaryCalendarId(null);
+            }
           }
         } else {
           setCalendarId(null);
+          setPrimaryCalendarId(null);
         }
         if (s.latest_study_plan_id) {
           const latest = await getLatestStudyPlan(classId);
@@ -573,15 +583,39 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
                 to see your calendar here.
               </p>
             ) : calendarId ? (
-              <div className="mt-4 rounded-xl overflow-hidden border border-white/10 bg-black/20">
-                <iframe
-                  title="GradePilot calendar"
-                  className="w-full h-[600px]"
-                  src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(
-                    calendarId
-                  )}&ctz=UTC`}
-                />
-              </div>
+              (() => {
+                const browserTz =
+                  typeof Intl !== 'undefined'
+                    ? Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+                    : 'UTC';
+                const params = new URLSearchParams();
+                params.append('src', calendarId);
+                if (primaryCalendarId) {
+                  params.append('src', primaryCalendarId);
+                }
+                params.append('ctz', browserTz);
+                params.append('mode', 'WEEK');
+                return (
+                  <>
+                    <div className="mt-4 rounded-xl overflow-hidden border border-white/10 bg-black/20">
+                      <iframe
+                        title="GradePilot calendar"
+                        className="w-full h-[600px]"
+                        src={`https://calendar.google.com/calendar/embed?${params.toString()}`}
+                      />
+                    </div>
+                    <p className="mt-2 text-xs text-slate-400">
+                      Showing the GradePilot calendar
+                      {primaryCalendarId
+                        ? ' overlaid with your primary Google calendar'
+                        : ''}
+                      , in {browserTz}. Other calendars (work, shared, etc.)
+                      stay private to this embed — open Google Calendar to see
+                      them all.
+                    </p>
+                  </>
+                );
+              })()
             ) : (
               <p className="mt-3 text-sm text-slate-300">
                 Calendar connected, but embed is not available yet. Try syncing deadlines first.
