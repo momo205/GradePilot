@@ -391,8 +391,7 @@ def upsert_plan_day_event(
     calendar_id = get_or_create_gradepilot_calendar(creds=creds)
 
     full_description = (
-        "Auto-scheduled by GradePilot.\n"
-        f"Plan: {plan_id} (day {day_index + 1})\n"
+        "Auto-scheduled by GradePilot.\n" f"Plan: {plan_id} (day {day_index + 1})\n"
     )
     if description:
         full_description += "\n" + description

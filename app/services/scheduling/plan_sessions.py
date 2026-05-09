@@ -148,13 +148,10 @@ def schedule_plan_day_sessions(
             errors.append(f"plan_sessions_skip:day={day_index}:no_slot_found")
             continue
 
-        day_label = (
-            str(day_item.get("day") or "").strip() or f"Day {day_index + 1}"
-        )
+        day_label = str(day_item.get("day") or "").strip() or f"Day {day_index + 1}"
         preview = ", ".join(tasks[:2])[:60] if tasks else ""
-        event_title = (
-            f"Study {class_title} — {day_label}"
-            + (f": {preview}" if preview else "")
+        event_title = f"Study {class_title} — {day_label}" + (
+            f": {preview}" if preview else ""
         )
         event_description = (
             f"{day_label}\n\nTasks:\n" + "\n".join(f"- {t}" for t in tasks)

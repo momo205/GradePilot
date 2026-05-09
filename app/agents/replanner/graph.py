@@ -19,13 +19,14 @@ from app.agents.replanner.nodes import (
 from app.agents.replanner.state import ReplannerState
 from app.core.config import get_settings
 
+_PostgresSaver: Any = None
 try:
     # Provided by `langgraph-checkpoint-postgres`.
-    from langgraph.checkpoint.postgres import PostgresSaver as _PostgresSaver
+    from langgraph.checkpoint.postgres import PostgresSaver as _ImportedPostgresSaver
 
+    _PostgresSaver = _ImportedPostgresSaver
     _HAS_POSTGRES_CHECKPOINTER = True
 except Exception:  # pragma: no cover
-    _PostgresSaver = None
     _HAS_POSTGRES_CHECKPOINTER = False
 
 
@@ -121,9 +122,7 @@ def build_graph(*, checkpointer: Any | None = None) -> Any:
     #   * a single focused-study session anchored to the next lecture.
     # Other triggers (deadline_added, etc.) keep the original sync-only path.
     def _post_persist_branch(s: ReplannerState) -> str:
-        if s.get("trigger") == "notes_added" or s.get(
-            "force_schedule_session", False
-        ):
+        if s.get("trigger") == "notes_added" or s.get("force_schedule_session", False):
             return "schedule"
         return _sync_branch(s)
 
@@ -177,6 +176,7 @@ def _run_replanner_sync(inp: ReplannerInput, thread_id: str | None) -> Replanner
         "calendar_sync_result": None,
         "completed_tasks_carried": None,
         "scheduled_session": None,
+        "scheduled_plan_sessions": None,
         "errors": [],
     }
 

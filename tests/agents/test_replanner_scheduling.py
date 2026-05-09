@@ -18,7 +18,7 @@ from app.deps.auth import CurrentUser, get_current_user
 from app.main import app
 
 
-class SchedulingTestClient(TestClient):  # type: ignore[misc]
+class SchedulingTestClient(TestClient):
     SessionLocal: sessionmaker[Session]
     user_uuid: uuid.UUID
     create_calls: list[dict[str, Any]]
@@ -168,11 +168,10 @@ def client(
     # Pin "now" inside the node so anchor + slot finder produce predictable
     # results across test runs.
     fixed_now = _far_future_now()
-    real_datetime = nodes_mod.datetime
 
-    class _FrozenDatetime(real_datetime):  # type: ignore[misc, valid-type]
+    class _FrozenDatetime(datetime):
         @classmethod
-        def now(cls, tz: Any = None) -> datetime:
+        def now(cls, tz: Any = None) -> datetime:  # type: ignore[override]
             return fixed_now if tz is None else fixed_now.astimezone(tz)
 
     monkeypatch.setattr(nodes_mod, "datetime", _FrozenDatetime)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -14,9 +15,9 @@ UTC = timezone.utc
 def _class(
     *,
     tz: str = "America/New_York",
-    meeting_pattern: dict | None = None,
+    meeting_pattern: dict[str, Any] | None = None,
     semester_end: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     return {
         "timezone": tz,
         "meeting_pattern": meeting_pattern,
@@ -24,7 +25,7 @@ def _class(
     }
 
 
-def _deadline(*, due_at: datetime | None, did: str = "d-1") -> dict:
+def _deadline(*, due_at: datetime | None, did: str = "d-1") -> dict[str, Any]:
     return {"id": did, "due_at": due_at}
 
 

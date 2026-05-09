@@ -139,9 +139,13 @@ def _compute_plan_horizon(
         days = max(1, math.ceil(delta_seconds / 86400.0))
         days = min(days, 14)
         if anchor.kind == "next_lecture":
-            reason = f"your next lecture on {anchor.at.strftime('%a %b %-d, %-I:%M %p %Z')}"
+            reason = (
+                f"your next lecture on {anchor.at.strftime('%a %b %-d, %-I:%M %p %Z')}"
+            )
         elif anchor.kind == "next_deadline":
-            reason = f"your next deadline on {anchor.at.strftime('%a %b %-d, %-I:%M %p %Z')}"
+            reason = (
+                f"your next deadline on {anchor.at.strftime('%a %b %-d, %-I:%M %p %Z')}"
+            )
         else:
             reason = "the next 7-day checkpoint"
         return days, reason
@@ -363,14 +367,8 @@ def create_study_plan_endpoint(
                 plan_id=plan.id,
                 plan_json=plan_json,
                 class_title=clazz.title,
-                user_timezone=(
-                    user_settings.timezone
-                    or clazz.timezone
-                    or "UTC"
-                ),
-                preferred_windows=list(
-                    user_settings.preferred_study_windows or []
-                ),
+                user_timezone=(user_settings.timezone or clazz.timezone or "UTC"),
+                preferred_windows=list(user_settings.preferred_study_windows or []),
             )
     except Exception:
         logger.exception(
