@@ -264,6 +264,45 @@ export function importDeadlinesFromSyllabus(classId: string, file: File) {
   })();
 }
 
+export type GoogleOAuthStartOut = {
+  authorization_url: string;
+  state?: string;
+  code_verifier?: string;
+};
+
+/** Returns the Google consent URL. Redirect the browser to `authorization_url`. */
+export function startGoogleCalendarOAuth() {
+  return backendFetch<GoogleOAuthStartOut>('/integrations/google/oauth/start');
+}
+
+/** Exchange OAuth `code` after Google redirects back (requires an authenticated session). */
+export function completeGoogleCalendarOAuth(
+  code: string,
+  state?: string | null,
+  code_verifier?: string | null
+) {
+  const q = new URLSearchParams({ code });
+  if (state) q.set('state', state);
+  if (code_verifier) q.set('code_verifier', code_verifier);
+  return backendFetch<{ ok: boolean }>(`/integrations/google/oauth/callback?${q.toString()}`);
+}
+
+/** Push this class’s deadlines to the user’s GradePilot Google Calendar. */
+export function syncClassToGoogleCalendar(classId: string) {
+  return backendFetch<{ created: number }>(
+    `/integrations/google/calendar/sync/${encodeURIComponent(classId)}`,
+    { method: 'POST' }
+  );
+}
+
+export type GoogleCalendarInfoOut = {
+  calendar_id: string;
+};
+
+export function getGoogleCalendarInfo() {
+  return backendFetch<GoogleCalendarInfoOut>('/integrations/google/calendar');
+}
+
 export type SummariseOut = {
   title: string;
   summary: string;

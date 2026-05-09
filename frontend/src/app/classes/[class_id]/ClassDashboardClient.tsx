@@ -13,7 +13,10 @@ import {
   getClassNotes,
   getClassSummary,
   getLatestStudyPlan,
+  getGoogleCalendarInfo,
+  getUserSettings,
   listDeadlines,
+  syncClassToGoogleCalendar,
   summariseDocument,
   updateDeadline,
   uploadMaterialPdf,
@@ -88,6 +91,10 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
   const [ragUploadDocType, setRagUploadDocType] = useState('reading');
   const [ragAskDocFilter, setRagAskDocFilter] = useState('');
   const [ragPasteToIndex, setRagPasteToIndex] = useState('');
+  const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
+  const [googleSyncBusy, setGoogleSyncBusy] = useState(false);
+  const [calendarSyncHint, setCalendarSyncHint] = useState<string | null>(null);
+  const [calendarId, setCalendarId] = useState<string | null>(null);
 
   const classTitle = summary?.clazz?.title ?? 'Class';
 
@@ -101,10 +108,26 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
         const s = await getClassSummary(classId);
         if (cancelled) return;
         setSummary(s);
-        const [n, d] = await Promise.all([getClassNotes(classId), listDeadlines(classId)]);
+        const [n, d, settings] = await Promise.all([
+          getClassNotes(classId),
+          listDeadlines(classId),
+          getUserSettings(),
+        ]);
         if (cancelled) return;
         setNotes(n);
         setDeadlines(d);
+        setGoogleConnected(settings.googleConnected);
+        if (settings.googleConnected) {
+          try {
+            const info = await getGoogleCalendarInfo();
+            if (!cancelled) setCalendarId(info.calendar_id);
+          } catch {
+            // Calendar embed is optional; ignore failures.
+            if (!cancelled) setCalendarId(null);
+          }
+        } else {
+          setCalendarId(null);
+        }
         if (s.latest_study_plan_id) {
           const latest = await getLatestStudyPlan(classId);
           if (!cancelled) setPlan(latest);
@@ -222,11 +245,109 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
               </div>
             </div>
           </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <div className="text-sm font-semibold text-white">Calendar</div>
+                <p className="mt-1 text-sm text-slate-300">
+                  Your GradePilot deadlines calendar in Google Calendar.
+                </p>
+              </div>
+              {calendarId ? (
+                <a
+                  className="text-sm text-slate-300 hover:text-white underline"
+                  href={`https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(
+                    calendarId
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open in Google Calendar
+                </a>
+              ) : null}
+            </div>
+
+            {googleConnected !== true ? (
+              <p className="mt-3 text-sm text-amber-200/90">
+                Connect Google Calendar from{' '}
+                <Link href="/classes" className="underline hover:text-white">
+                  Classes
+                </Link>{' '}
+                to see your calendar here.
+              </p>
+            ) : calendarId ? (
+              <div className="mt-4 rounded-xl overflow-hidden border border-white/10 bg-black/20">
+                <iframe
+                  title="GradePilot calendar"
+                  className="w-full h-[600px]"
+                  src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(
+                    calendarId
+                  )}&ctz=UTC`}
+                />
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-300">
+                Calendar connected, but embed is not available yet. Try syncing deadlines first.
+              </p>
+            )}
+          </div>
         </div>
       ) : null}
 
       {tab === 'deadlines' ? (
         <section className="space-y-4">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">Google Calendar</div>
+                <p className="mt-1 text-xs text-slate-400 max-w-xl">
+                  Push this class&apos;s deadlines to your GradePilot calendar (create or update events).
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={
+                  googleSyncBusy ||
+                  googleConnected !== true ||
+                  (deadlines ?? []).length === 0
+                }
+                onClick={async () => {
+                  setGoogleSyncBusy(true);
+                  setError(null);
+                  setCalendarSyncHint(null);
+                  try {
+                    const { created } = await syncClassToGoogleCalendar(classId);
+                    setCalendarSyncHint(
+                      created === 0
+                        ? 'No deadlines to sync.'
+                        : `Updated ${created} deadline event${created === 1 ? '' : 's'} in Google Calendar.`
+                    );
+                  } catch (err: unknown) {
+                    setError(err instanceof Error ? err.message : 'Calendar sync failed');
+                  } finally {
+                    setGoogleSyncBusy(false);
+                  }
+                }}
+                className="shrink-0 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {googleSyncBusy ? 'Syncing…' : 'Sync to Google Calendar'}
+              </button>
+            </div>
+            {googleConnected === false ? (
+              <p className="text-xs text-amber-200/90">
+                Connect Google from{' '}
+                <Link href="/classes" className="underline hover:text-white">
+                  Classes
+                </Link>{' '}
+                first.
+              </p>
+            ) : null}
+            {calendarSyncHint ? (
+              <p className="text-xs text-emerald-400">{calendarSyncHint}</p>
+            ) : null}
+          </div>
+
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
             <div className="text-sm font-semibold text-white">Deadlines</div>
             <div className="space-y-2">

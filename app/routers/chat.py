@@ -18,6 +18,7 @@ from app.schemas import (
     ChatToolAction,
 )
 from app.services.chat.onboarding import run_onboarding_step
+from app.services.datetime_parse import parse_user_due_to_datetime
 from app.services.study_plan_semester import (
     SemesterStudyPlanGenerationError,
     SemesterStudyPlanRateLimitError,
@@ -166,12 +167,19 @@ def post_message(
                 title_raw = payload_obj.get("title")
                 due_text = payload_obj.get("due_text")
                 if isinstance(title_raw, str) and isinstance(due_text, str):
+                    tz = (
+                        state_json.get("timezone")
+                        if isinstance(state_json.get("timezone"), str)
+                        else None
+                    )
+                    due_at = parse_user_due_to_datetime(due=due_text, timezone=tz)
                     crud.create_deadline(
                         db=db,
                         user_id=user_id,
                         class_id=class_id,
                         title=title_raw,
                         due_text=due_text,
+                        due_at=due_at,
                     )
 
         elif a_type == "generate_semester_plan":

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 from google.oauth2.credentials import Credentials
@@ -78,18 +78,19 @@ def upsert_deadline_event(
         dt = due_at
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
+        # Google Calendar requires a valid end time for timed events.
+        # Represent deadlines as a short timed block.
+        end_dt = dt + timedelta(minutes=15)
         body: dict[str, Any] = {
             "summary": summary,
             "description": description,
             "start": {"dateTime": dt.isoformat()},
-            "end": {"dateTime": dt.isoformat()},
+            "end": {"dateTime": end_dt.isoformat()},
         }
     else:
-        # Best-effort all-day event without inventing dates.
-        body = {
-            "summary": summary,
-            "description": description,
-        }
+        # Google Calendar API requires start/end. If we don't have a real timestamp,
+        # we can't reliably create an event without inventing a date.
+        raise ValueError("Deadline has no due_at; cannot sync to Google Calendar")
 
     if event_id:
         updated = (
@@ -155,6 +156,9 @@ def sync_class(
     )
     created_or_updated = 0
     for d in deadlines:
+        if d.due_at is None:
+            # Skip unscheduled deadlines (only due_text). We avoid inventing dates.
+            continue
         local_id = str(d.id)
         link = crud.get_calendar_event_link(
             db=db, user_id=user_id, kind="deadline", local_id=local_id

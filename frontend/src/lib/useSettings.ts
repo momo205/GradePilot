@@ -39,10 +39,8 @@ export function useSettings() {
         void updateUserSettings({ daysBeforeDeadline: v });
         return { ...s, daysBeforeDeadline: v };
       }),
+    /** Local-only; after OAuth completes, refetch with getUserSettings() or reload the page. */
     setGoogleConnected: (v: boolean) =>
-      setSettings((s) => {
-        void updateUserSettings({ notificationsEnabled: s.notificationsEnabled });
-        return { ...s, googleConnected: v };
-      }),
+      setSettings((s) => ({ ...s, googleConnected: v })),
   };
 }
