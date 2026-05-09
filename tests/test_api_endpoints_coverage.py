@@ -84,10 +84,10 @@ def test_chat_session_create_get_and_post_message_creates_classes(
     assert r.status_code == 200
     assert r.json()["session"]["id"] == session_id
 
-    # Deterministic onboarding: comma-separated titles -> tool action create_classes
+    # Onboarding wizard: JSON class title -> tool action create_class
     r = client.post(
         f"/chat/sessions/{session_id}/messages",
-        json={"content": "CS101, Calculus II"},
+        json={"content": '{"class_title":"CS101"}'},
     )
     assert r.status_code == 200
     body = r.json()
@@ -95,8 +95,7 @@ def test_chat_session_create_get_and_post_message_creates_classes(
     assert any(m["role"] == "user" for m in body["messages"])
     assert any(m["role"] == "assistant" for m in body["messages"])
 
-    # The tool action list should include create_classes
-    assert any(a["type"] == "create_classes" for a in body["tool_actions"])
+    assert any(a["type"] == "create_class" for a in body["tool_actions"])
 
 
 def test_chat_post_message_executes_tool_actions_happy_path(

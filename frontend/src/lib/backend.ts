@@ -349,8 +349,9 @@ export type ChatReplyOut = {
   next_url?: string | null;
 };
 
-export function createOrGetChatSession() {
-  return backendFetch<ChatSessionOut>('/chat/sessions', { method: 'POST' });
+export function createOrGetChatSession(opts?: { forceNew?: boolean }) {
+  const qs = opts?.forceNew ? '?force_new=true' : '';
+  return backendFetch<ChatSessionOut>(`/chat/sessions${qs}`, { method: 'POST' });
 }
 
 export function getChatSession(sessionId: string) {

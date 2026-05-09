@@ -7,6 +7,9 @@ from typing import Any, cast
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
+from app.db import crud
+from app.db.models import Deadline
+
 CALENDAR_SUMMARY = "GradePilot"
 CALENDAR_TIMEZONE = "UTC"
 
@@ -115,3 +118,64 @@ def build_google_credentials_for_calendar(
         client_id=client_id,
         client_secret=client_secret,
     )
+
+
+def sync_class(
+    *,
+    db: Any,
+    user_id: Any,
+    class_id: Any,
+    settings: Any,
+) -> dict[str, Any]:
+    """
+    Sync a class's deadlines into the user's GradePilot Google Calendar.
+
+    This is used by orchestration layers (e.g. LangGraph replanner) so they can
+    reuse the same behavior as the integrations router.
+    """
+    if not getattr(settings, "google_oauth_client_id", None) or not getattr(
+        settings, "google_oauth_client_secret", None
+    ):
+        raise RuntimeError("Google OAuth is not configured")
+
+    integ = crud.get_google_integration(db=db, user_id=user_id)
+    if integ is None:
+        raise RuntimeError("Google integration not connected")
+
+    creds = build_google_credentials_for_calendar(
+        client_id=settings.google_oauth_client_id,
+        client_secret=settings.google_oauth_client_secret,
+        access_token=integ.access_token,
+        refresh_token=integ.refresh_token,
+    )
+    calendar_id = get_or_create_gradepilot_calendar(creds=creds)
+
+    deadlines: list[Deadline] = crud.list_deadlines(
+        db=db, user_id=user_id, class_id=class_id
+    )
+    created_or_updated = 0
+    for d in deadlines:
+        local_id = str(d.id)
+        link = crud.get_calendar_event_link(
+            db=db, user_id=user_id, kind="deadline", local_id=local_id
+        )
+        event_id = link.google_event_id if link is not None else None
+        up = upsert_deadline_event(
+            creds=creds,
+            calendar_id=calendar_id,
+            event_id=event_id,
+            title=d.title,
+            due_at=d.due_at,
+            due_text=d.due_text,
+        )
+        crud.upsert_calendar_event_link(
+            db=db,
+            user_id=user_id,
+            class_id=class_id,
+            kind="deadline",
+            local_id=local_id,
+            google_calendar_id=up.calendar_id,
+            google_event_id=up.event_id,
+        )
+        created_or_updated += 1
+    return {"created_or_updated": created_or_updated}

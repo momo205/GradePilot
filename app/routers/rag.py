@@ -76,8 +76,9 @@ async def upload_material(
             document_id=result.document_id, chunks_created=result.chunks_created
         )
     except EmbeddingsError as e:
+        status_code = int(getattr(e, "status_code", 502) or 502)
         raise HTTPException(
-            status_code=502,
+            status_code=status_code,
             detail=(
                 f"Embeddings failed: {e}. "
                 "Check GOOGLE_EMBEDDING_MODEL (default models/gemini-embedding-001) and GOOGLE_API_KEY."
@@ -117,8 +118,9 @@ def ask_class(
             document_type=payload.document_type,
         )
     except EmbeddingsError as e:
+        status_code = int(getattr(e, "status_code", 502) or 502)
         raise HTTPException(
-            status_code=502,
+            status_code=status_code,
             detail=(
                 f"Embeddings failed: {e}. "
                 "Check GOOGLE_EMBEDDING_MODEL (default models/gemini-embedding-001) and GOOGLE_API_KEY."

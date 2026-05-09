@@ -8,6 +8,7 @@ from datetime import datetime
 
 from google.api_core.exceptions import ResourceExhausted
 from google import genai
+from google.genai.errors import ClientError
 from google.genai import types
 from pydantic import BaseModel, Field, ValidationError
 
@@ -17,13 +18,23 @@ logger = logging.getLogger("gradepilot.ai")
 
 
 class DeadlineExtractError(RuntimeError):
-    pass
+    status_code: int = 502
+
+    def __init__(self, message: str, *, status_code: int | None = None):
+        super().__init__(message)
+        if status_code is not None:
+            self.status_code = int(status_code)
 
 
 class DeadlineExtractRateLimitError(DeadlineExtractError):
     def __init__(self, message: str, *, retry_after_seconds: int | None = None):
         super().__init__(message)
         self.retry_after_seconds = retry_after_seconds
+        self.status_code = 429
+
+
+class DeadlineExtractPermissionError(DeadlineExtractError):
+    status_code = 503
 
 
 _RETRY_RE = re.compile(r"Please retry in\s+([0-9]+(?:\.[0-9]+)?)s", re.IGNORECASE)
@@ -79,7 +90,10 @@ def extract_deadlines_from_text(
 ) -> list[ExtractedDeadline]:
     settings = get_settings()
     if not settings.google_api_key:
-        raise DeadlineExtractError("GOOGLE_API_KEY is not configured")
+        raise DeadlineExtractError(
+            "GOOGLE_API_KEY is not configured",
+            status_code=503,
+        )
 
     client = genai.Client(api_key=settings.google_api_key)
     model_name = settings.google_model
@@ -150,6 +164,20 @@ Document content:
         raise DeadlineExtractRateLimitError(
             "Rate limited by Gemini API. Please retry shortly.",
             retry_after_seconds=retry_after,
+        ) from e
+    except ClientError as e:
+        # Common case: upstream access denied / project not allowlisted.
+        # Expose as 503 (service not available) with actionable detail.
+        code = int(getattr(e, "code", 500) or 500)
+        if code in (401, 403):
+            raise DeadlineExtractPermissionError(
+                "Gemini API access denied for this project/key. "
+                "Verify the API key, project access/allowlist, and billing.",
+                status_code=503,
+            ) from e
+        raise DeadlineExtractError(
+            f"Gemini API request failed (HTTP {code})",
+            status_code=502,
         ) from e
     except Exception as e:  # noqa: BLE001
         logger.exception("deadline_extract_failed err=%s", e.__class__.__name__)
