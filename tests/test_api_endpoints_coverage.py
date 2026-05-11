@@ -36,7 +36,9 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
         finally:
             db.close()
 
-    monkeypatch.setattr(onboarding_semester_plan_job, "session_scope", _test_session_scope)
+    monkeypatch.setattr(
+        onboarding_semester_plan_job, "session_scope", _test_session_scope
+    )
 
     user_id = uuid.uuid4()
 

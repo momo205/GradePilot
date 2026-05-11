@@ -85,12 +85,12 @@ def test_semester_study_plan_genai_429_maps_to_rate_limit(
         "error": {
             "code": 429,
             "status": "RESOURCE_EXHAUSTED",
-            "message": (
-                "Quota exceeded. Please retry in 33.5s."
-            ),
+            "message": ("Quota exceeded. Please retry in 33.5s."),
         }
     }
-    monkeypatch.setattr(svc, "genai", _patch_genai(exc=ClientError(429, err_body, None)))
+    monkeypatch.setattr(
+        svc, "genai", _patch_genai(exc=ClientError(429, err_body, None))
+    )
     with patch(
         "app.services.study_plan_semester.get_settings", return_value=_mock_settings()
     ):
@@ -148,7 +148,7 @@ def test_semester_study_plan_retries_transient_429(
         _make_mock_response(payload),
     ]
     monkeypatch.setattr(svc, "genai", genai_mock)
-    monkeypatch.setattr(svc.time, "sleep", lambda _s: None)
+    monkeypatch.setattr("app.services.study_plan_semester.time.sleep", lambda _s: None)
     with patch(
         "app.services.study_plan_semester.get_settings", return_value=_mock_settings()
     ):
@@ -185,7 +185,7 @@ def test_semester_study_plan_daily_quota_skips_retry(
     client.models.generate_content.side_effect = ClientError(429, body, None)
     monkeypatch.setattr(svc, "genai", genai_mock)
     sleeps: list[float] = []
-    monkeypatch.setattr(svc.time, "sleep", sleeps.append)
+    monkeypatch.setattr("app.services.study_plan_semester.time.sleep", sleeps.append)
     with patch(
         "app.services.study_plan_semester.get_settings", return_value=_mock_settings()
     ):

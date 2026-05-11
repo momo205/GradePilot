@@ -183,7 +183,9 @@ def generate_study_plan(
                 (e.message or f"Gemini API error ({e.code})")[:800]
             ) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("study_plan_generation_failed err=%s", e.__class__.__name__)
+            logger.exception(
+                "study_plan_generation_failed err=%s", e.__class__.__name__
+            )
             raise StudyPlanGenerationError(
                 f"Study plan generation failed ({e.__class__.__name__})"
             ) from e

@@ -739,14 +739,10 @@ async def onboarding_syllabus_bootstrap_endpoint(
         raise HTTPException(status_code=404, detail="Class not found")
 
     if chat_session_id is not None:
-        sess = crud.get_chat_session(
-            db=db, user_id=user_id, session_id=chat_session_id
-        )
+        sess = crud.get_chat_session(db=db, user_id=user_id, session_id=chat_session_id)
         if sess is None:
             raise HTTPException(status_code=404, detail="Chat session not found")
-        st_row = crud.get_chat_state(
-            db=db, user_id=user_id, session_id=chat_session_id
-        )
+        st_row = crud.get_chat_state(db=db, user_id=user_id, session_id=chat_session_id)
         st_json: dict[str, Any] = dict(st_row.state_json or {}) if st_row else {}
         raw_cid = st_json.get("class_id")
         raw_phase = st_json.get("phase")
@@ -757,9 +753,7 @@ async def onboarding_syllabus_bootstrap_endpoint(
         else:
             phase_num = 1
         if not (
-            isinstance(raw_cid, str)
-            and raw_cid == str(class_id)
-            and phase_num == 2
+            isinstance(raw_cid, str) and raw_cid == str(class_id) and phase_num == 2
         ):
             raise HTTPException(
                 status_code=400,
@@ -812,9 +806,7 @@ async def onboarding_syllabus_bootstrap_endpoint(
     preview = (result.course_summary or "")[:400]
 
     if chat_session_id is not None:
-        st_row = crud.get_chat_state(
-            db=db, user_id=user_id, session_id=chat_session_id
-        )
+        st_row = crud.get_chat_state(db=db, user_id=user_id, session_id=chat_session_id)
         merged: dict[str, Any] = dict(st_row.state_json or {}) if st_row else {}
         merged["phase"] = 3
         merged["suggested_timezone"] = result.suggested_timezone

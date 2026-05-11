@@ -30,7 +30,9 @@ def run_onboarding_semester_plan_job(
     with session_scope() as db:
         st = crud.get_chat_state(db=db, user_id=user_id, session_id=session_id)
         if st is None:
-            logger.warning("onboarding_semester_plan_missing_chat_state session=%s", session_id)
+            logger.warning(
+                "onboarding_semester_plan_missing_chat_state session=%s", session_id
+            )
             return
 
         state_json: dict[str, Any] = dict(st.state_json or {})

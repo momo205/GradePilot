@@ -17,7 +17,9 @@ from app.schemas import (
     ChatToolAction,
 )
 from app.services.chat.onboarding import run_onboarding_step
-from app.services.chat.onboarding_semester_plan_job import run_onboarding_semester_plan_job
+from app.services.chat.onboarding_semester_plan_job import (
+    run_onboarding_semester_plan_job,
+)
 from app.services.datetime_parse import parse_user_due_to_datetime
 
 router = APIRouter(prefix="/chat", tags=["chat"])

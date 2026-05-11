@@ -59,7 +59,9 @@ class SyllabusBootstrapResult:
     suggested_semester_term: str | None
 
 
-def extract_syllabus_bootstrap_ai(*, filename: str, raw_text: str) -> SyllabusBootstrapExtractAI:
+def extract_syllabus_bootstrap_ai(
+    *, filename: str, raw_text: str
+) -> SyllabusBootstrapExtractAI:
     settings = get_settings()
     if not settings.google_api_key:
         raise DeadlineExtractError(
