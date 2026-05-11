@@ -336,6 +336,219 @@ def create_study_session_event(
     return {"event_id": event_id, "html_link": html_link}
 
 
+def _normalize_lines(text: str) -> list[str]:
+    return [ln.rstrip() for ln in (text or "").replace("\r\n", "\n").split("\n")]
+
+
+def _render_daily_study_section(*, class_title: str, tasks: list[str]) -> str:
+    header = f"### {class_title}".strip()
+    if tasks:
+        body = "\n".join(f"- {t}" for t in tasks)
+        return f"{header}\n{body}".strip()
+    return header
+
+
+def _merge_daily_study_description(
+    *,
+    existing_description: str,
+    day_label: str,
+    date_local_iso: str,
+    class_title: str,
+    tasks: list[str],
+) -> str:
+    """Merge/replace a class section into an existing daily study-session description.
+
+    We keep the format stable so repeated scheduling is idempotent and so
+    separate per-class schedulers can safely merge into one event.
+    """
+    title_line = f"Study session — {day_label}".strip()
+    header = f"{title_line}\nDate: {date_local_iso}\n\nClasses:\n"
+
+    section = _render_daily_study_section(class_title=class_title, tasks=tasks)
+
+    existing = (existing_description or "").strip()
+    if not existing:
+        return (header + section).strip()
+
+    # If it doesn't look like our format, preserve the user's content and append ours.
+    if "Classes:" not in existing:
+        return (existing + "\n\n" + header + section).strip()
+
+    lines = _normalize_lines(existing)
+    out_lines: list[str] = []
+
+    # Ensure the top header stays ours (but keep any user preamble above "Classes:").
+    try:
+        classes_idx = next(i for i, ln in enumerate(lines) if ln.strip() == "Classes:")
+    except StopIteration:
+        return (existing + "\n\n" + header + section).strip()
+
+    # Keep any content before "Classes:" (user edits), then enforce our header.
+    preamble = "\n".join(lines[:classes_idx]).strip()
+    if preamble:
+        out_lines.extend(_normalize_lines(preamble))
+        out_lines.append("")
+    out_lines.extend(_normalize_lines(header.strip()))
+
+    # Parse existing class sections and replace/append this class section.
+    current_sections: dict[str, list[str]] = {}
+    current_title: str | None = None
+    for ln in lines[classes_idx + 1 :]:
+        if ln.startswith("### "):
+            current_title = ln[4:].strip()
+            current_sections.setdefault(current_title, [])
+            continue
+        if current_title is None:
+            continue
+        current_sections[current_title].append(ln)
+
+    current_sections[class_title] = _normalize_lines(section)[1:]  # exclude header line
+
+    # Render in insertion order as best-effort: keep existing order first.
+    rendered: list[str] = []
+    seen: set[str] = set()
+    for ln in lines[classes_idx + 1 :]:
+        if ln.startswith("### "):
+            t = ln[4:].strip()
+            if t in seen:
+                continue
+            seen.add(t)
+            rendered.append(f"### {t}")
+            for body_ln in current_sections.get(t, []):
+                if body_ln != "":
+                    rendered.append(body_ln)
+            rendered.append("")
+    if class_title not in seen:
+        rendered.append(f"### {class_title}")
+        for body_ln in current_sections.get(class_title, []):
+            if body_ln != "":
+                rendered.append(body_ln)
+        rendered.append("")
+
+    # Trim trailing blank lines.
+    while rendered and rendered[-1] == "":
+        rendered.pop()
+
+    return ("\n".join(out_lines + rendered)).strip()
+
+
+def upsert_daily_study_session_event(
+    *,
+    db: Session,
+    user_id: str,
+    class_id: uuid.UUID,
+    date_local_iso: str,
+    day_label: str,
+    class_title: str,
+    tasks: list[str],
+    start: datetime,
+    end: datetime,
+) -> dict[str, str]:
+    """Create or update a single shared "daily study session" event.
+
+    Idempotent on ``(user_id, kind="daily_study_session", local_id=date_local_iso)``.
+    When the event already exists, we **preserve its time** and only merge the
+    description so multiple classes can contribute to the same 1-hour session.
+    """
+    if start.tzinfo is None or end.tzinfo is None:
+        raise ValueError("start and end must be timezone-aware")
+    if end <= start:
+        raise ValueError("end must be after start")
+
+    user_uuid = uuid.UUID(user_id)
+
+    settings = get_settings()
+    if not settings.google_oauth_client_id or not settings.google_oauth_client_secret:
+        raise RuntimeError("Google OAuth is not configured")
+
+    integ = crud.get_google_integration(db=db, user_id=user_uuid)
+    if integ is None:
+        raise RuntimeError("Google integration not connected")
+    if not has_required_scopes(integ):
+        raise RuntimeError("Google integration is missing required scopes")
+
+    creds = build_google_credentials_for_calendar(
+        client_id=settings.google_oauth_client_id,
+        client_secret=settings.google_oauth_client_secret,
+        access_token=integ.access_token,
+        refresh_token=integ.refresh_token,
+    )
+    calendar_id = get_or_create_gradepilot_calendar(creds=creds)
+    svc = build("calendar", "v3", credentials=creds, cache_discovery=False)
+
+    local_id = date_local_iso
+    existing_link = crud.get_calendar_event_link(
+        db=db, user_id=user_uuid, kind="daily_study_session", local_id=local_id
+    )
+
+    summary = "Study session"
+    description = _merge_daily_study_description(
+        existing_description="",
+        day_label=day_label,
+        date_local_iso=date_local_iso,
+        class_title=class_title,
+        tasks=tasks,
+    )
+
+    if existing_link is not None:
+        current = (
+            svc.events()
+            .get(calendarId=calendar_id, eventId=existing_link.google_event_id)
+            .execute()
+        )
+        current_desc = str(current.get("description") or "")
+        description = _merge_daily_study_description(
+            existing_description=current_desc,
+            day_label=day_label,
+            date_local_iso=date_local_iso,
+            class_title=class_title,
+            tasks=tasks,
+        )
+        # Preserve the existing start/end (don't move the event when merging).
+        cur_start = (current.get("start") or {}).get("dateTime")
+        cur_end = (current.get("end") or {}).get("dateTime")
+        body: dict[str, Any] = {
+            "summary": summary,
+            "description": description,
+        }
+        if isinstance(cur_start, str) and isinstance(cur_end, str):
+            body["start"] = {"dateTime": cur_start}
+            body["end"] = {"dateTime": cur_end}
+
+        event = (
+            svc.events()
+            .patch(
+                calendarId=calendar_id,
+                eventId=existing_link.google_event_id,
+                body=body,
+            )
+            .execute()
+        )
+    else:
+        body = {
+            "summary": summary,
+            "description": description,
+            "start": {"dateTime": start.isoformat()},
+            "end": {"dateTime": end.isoformat()},
+        }
+        event = svc.events().insert(calendarId=calendar_id, body=body).execute()
+
+    event_id = str(event.get("id") or "")
+    html_link = str(event.get("htmlLink") or "")
+
+    crud.upsert_calendar_event_link(
+        db=db,
+        user_id=user_uuid,
+        class_id=class_id,
+        kind="daily_study_session",
+        local_id=local_id,
+        google_calendar_id=calendar_id,
+        google_event_id=event_id,
+    )
+
+    return {"event_id": event_id, "html_link": html_link}
+
+
 def upsert_plan_day_event(
     *,
     db: Session,

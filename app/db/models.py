@@ -113,6 +113,46 @@ class StudyPlan(Base):
     clazz: Mapped[Class] = relationship(back_populates="study_plans")
 
 
+class StudyPlanJob(Base):
+    __tablename__ = "study_plan_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), index=True, nullable=False
+    )
+    class_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("classes.id", ondelete="CASCADE"), index=True
+    )
+    notes_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("class_notes.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
+    phase: Mapped[str] = mapped_column(String(40), nullable=False, default="queued")
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    result_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("study_plans.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Deadline(Base):
     __tablename__ = "deadlines"
 

@@ -6,18 +6,19 @@ import {
   addNotes,
   askClass,
   createDeadline,
-  createStudyPlan,
   deleteDeadline,
   extractPdfText,
   generatePractice,
   getClassNotes,
   getClassSummary,
   getLatestStudyPlan,
+  getStudyPlanJob,
   getGoogleCalendarInfo,
   getUserSettings,
   listDeadlines,
   runReplanner,
   syncClassToGoogleCalendar,
+  startStudyPlanJob,
   summariseDocument,
   updateClassTimeline,
   updateDeadline,
@@ -34,6 +35,7 @@ import {
   type PracticeQuestion,
   type ScheduledPlanSession,
   type ScheduledSession,
+  type StudyPlanJobOut,
   type StudyPlanOut,
   type SummariseOut,
 } from '@/lib/backend';
@@ -79,6 +81,8 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
   const [notesSummary, setNotesSummary] = useState<SummariseOut | null>(null);
   const [summarising, setSummarising] = useState(false);
   const [lastUpload, setLastUpload] = useState<{ filename: string; text: string } | null>(null);
+  const [uploadingNotes, setUploadingNotes] = useState(false);
+  const [uploadingNotesLabel, setUploadingNotesLabel] = useState<string | null>(null);
 
   const [deadlines, setDeadlines] = useState<DeadlineOut[] | null>(null);
   const [deadlineTitle, setDeadlineTitle] = useState('');
@@ -91,6 +95,8 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
   const [practice, setPractice] = useState<PracticeQuestion[] | null>(null);
 
   const [plan, setPlan] = useState<StudyPlanOut | null>(null);
+  const [planJob, setPlanJob] = useState<StudyPlanJobOut | null>(null);
+  const [generatingPlan, setGeneratingPlan] = useState(false);
 
   const [ragIngestResult, setRagIngestResult] = useState<MaterialIngestOut | null>(null);
   const [ragAskResult, setRagAskResult] = useState<ClassAskOut | null>(null);
@@ -884,11 +890,18 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
             notesDraft={notesDraft}
             onNotesDraftChange={setNotesDraft}
             loading={loading}
+            uploading={uploadingNotes}
+            uploadingLabel={uploadingNotesLabel}
             summarising={summarising}
             notesSummary={notesSummary}
             onUploadFiles={async (files) => {
               setError(null);
-              setLoading(true);
+              setUploadingNotes(true);
+              setUploadingNotesLabel(
+                files.some((f) => f.name.toLowerCase().endsWith('.pdf'))
+                  ? 'Extracting PDF…'
+                  : 'Reading files…'
+              );
               setNotesSummary(null);
               try {
                 const { filename, text } = await filesToText(files);
@@ -900,7 +913,8 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
               } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : 'Failed to upload notes');
               } finally {
-                setLoading(false);
+                setUploadingNotes(false);
+                setUploadingNotesLabel(null);
               }
             }}
             onSummariseNotes={async () => {
@@ -999,7 +1013,7 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
           <PlanPanel
             hasNotes={Boolean(notes && notes.length > 0)}
             plan={plan}
-            loading={loading}
+            loading={generatingPlan}
             onToggleTask={async (taskText, completed) => {
               if (!plan) return;
               const currentCompleted = plan.plan_json.completed_tasks ?? [];
@@ -1021,27 +1035,59 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
               }
             }}
             onGenerate={async () => {
-              setLoading(true);
+              setGeneratingPlan(true);
               setError(null);
+              setPlanJob(null);
               try {
                 const latestNotesId = notes?.[0]?.id;
-                const created = await createStudyPlan(classId, latestNotesId);
-                setPlan(created);
-                if (created.scheduled_plan_sessions?.length) {
-                  setLastPlanSessions(created.scheduled_plan_sessions);
-                  setAutoSchedulingHint(null);
-                } else if (autoSchedule) {
-                  setAutoSchedulingHint(
-                    'Plan generated, but no calendar slots were free for the plan days.'
-                  );
+                const { job_id } = await startStudyPlanJob(
+                  classId,
+                  latestNotesId ?? undefined
+                );
+
+                const startedAt = Date.now();
+                const timeoutMs = 2 * 60 * 1000;
+                // eslint-disable-next-line no-constant-condition
+                while (true) {
+                  const job = await getStudyPlanJob(job_id);
+                  setPlanJob(job);
+                  if (job.status === 'succeeded') break;
+                  if (job.status === 'failed') {
+                    throw new Error(job.error || 'Study plan generation failed');
+                  }
+                  if (Date.now() - startedAt > timeoutMs) {
+                    throw new Error(
+                      'Study plan is still running. Please check back in a moment.'
+                    );
+                  }
+                  await new Promise((r) => setTimeout(r, 1200));
                 }
+
+                const latest = await getLatestStudyPlan(classId);
+                setPlan(latest);
               } catch (e: unknown) {
                 setError(e instanceof Error ? e.message : 'Failed to generate plan');
               } finally {
-                setLoading(false);
+                setGeneratingPlan(false);
               }
             }}
           />
+          {planJob && planJob.status !== 'succeeded' ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="text-sm font-semibold text-white">Generating plan</div>
+              <div className="mt-2 text-sm text-slate-300">
+                {planJob.message || planJob.phase}
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className="h-full bg-indigo-500 transition-all duration-500"
+                  style={{
+                    width: `${Math.max(2, Math.min(100, planJob.progress || 0))}%`,
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

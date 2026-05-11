@@ -240,6 +240,38 @@ export function createStudyPlan(classId: string, notesId?: string) {
   });
 }
 
+export type StudyPlanJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
+
+export type StudyPlanJobCreateOut = {
+  job_id: string;
+};
+
+export type StudyPlanJobOut = {
+  id: string;
+  class_id: string;
+  user_id: string;
+  notes_id: string | null;
+  status: StudyPlanJobStatus;
+  phase: string;
+  progress: number;
+  message: string | null;
+  error: string | null;
+  result_plan_id: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+export function startStudyPlanJob(classId: string, notesId?: string) {
+  return backendFetch<StudyPlanJobCreateOut>(`/classes/${classId}/study-plan/jobs`, {
+    method: 'POST',
+    body: JSON.stringify({ notes_id: notesId ?? null }),
+  });
+}
+
+export function getStudyPlanJob(jobId: string) {
+  return backendFetch<StudyPlanJobOut>(`/classes/study-plan/jobs/${jobId}`);
+}
+
 export function createSemesterStudyPlan(
   classId: string,
   payload: {
