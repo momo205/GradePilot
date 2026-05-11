@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from google.api_core.exceptions import ResourceExhausted
+from typing import Any, cast
 
 
 def _make_mock_response(text: str) -> MagicMock:
@@ -99,7 +100,7 @@ def test_generate_learning_resources_rate_limit_error(
 ) -> None:
     from app.services import learning_resources as svc
 
-    exc = ResourceExhausted("Please retry in 0.1s.")  # type: ignore[no-untyped-call]
+    exc = cast(Any, ResourceExhausted)("Please retry in 0.1s.")
     monkeypatch.setattr(svc, "genai", _patch_genai(exc=exc))
 
     with patch(
