@@ -272,10 +272,25 @@ export default function ChatClient() {
       </>
     );
 
+  const st = chat?.state;
+  const phase1Done = phase > 1;
+  const phase2Done = phase > 2;
+  const phase3Done = phase >= 4;
+  const savedTz =
+    st && typeof st === 'object' && typeof st.timezone === 'string' ? st.timezone.trim() : '';
+  const savedStart =
+    st && typeof st === 'object' && typeof st.semester_start === 'string'
+      ? st.semester_start.trim()
+      : '';
+  const savedEnd =
+    st && typeof st === 'object' && typeof st.semester_end === 'string'
+      ? st.semester_end.trim()
+      : '';
+
   return (
     <StudyPlanShell
       title="GradePilot Chat"
-      subtitle="A step-by-step setup wizard for one class."
+      subtitle="Full setup in one view — complete each step in order (same rules as before)."
       actions={
         <div className="flex items-center gap-4">
           <Link href="/classes" className="text-sm text-slate-300 hover:text-white transition-colors">
@@ -330,7 +345,7 @@ export default function ChatClient() {
           ) : null}
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-4">
-            <div className="space-y-3 max-h-[55vh] overflow-auto pr-1">
+            <div className="space-y-3 max-h-[40vh] overflow-auto pr-1">
               {(chat?.messages ?? []).length ? (
                 chat!.messages.map((m) => (
                   <div
@@ -353,48 +368,82 @@ export default function ChatClient() {
               )}
             </div>
 
-            {phase === 1 ? (
+            <div className="space-y-4 border-t border-white/10 pt-4">
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-3">
-                <div className="text-sm font-semibold text-white">Phase 1 — Class setup</div>
-                <input
-                  value={classTitle}
-                  onChange={(e) => setClassTitle(e.target.value)}
-                  placeholder='e.g. "CS 301 — Algorithms"'
-                  className="w-full bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/20"
-                />
-                <div className="flex justify-end">
-                  <button
-                    disabled={loading || classTitle.trim().length === 0}
-                    onClick={() =>
-                      void sendRaw(JSON.stringify({ class_title: classTitle.trim() }))
-                    }
-                    className="rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold disabled:opacity-60"
-                  >
-                    Create class
-                  </button>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-semibold text-white">Step 1 — Class setup</div>
+                  {phase1Done ? (
+                    <span className="text-xs font-medium text-emerald-400">Done</span>
+                  ) : null}
                 </div>
+                {phase === 1 ? (
+                  <>
+                    <input
+                      value={classTitle}
+                      onChange={(e) => setClassTitle(e.target.value)}
+                      placeholder='e.g. "CS 301 — Algorithms"'
+                      className="w-full bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/20"
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        disabled={loading || classTitle.trim().length === 0}
+                        onClick={() =>
+                          void sendRaw(JSON.stringify({ class_title: classTitle.trim() }))
+                        }
+                        className="rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                      >
+                        Create class
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-300">
+                    <span className="text-slate-400">Class: </span>
+                    {classTitle.trim() || '—'}
+                  </p>
+                )}
               </div>
-            ) : null}
 
-            {phase === 2 ? (
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-3">
-                <div className="text-sm font-semibold text-white">Phase 2 — Syllabus</div>
+              <div
+                className={[
+                  'rounded-2xl border border-white/10 bg-black/20 p-4 space-y-3',
+                  phase < 2 ? 'opacity-70' : '',
+                ].join(' ')}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-semibold text-white">Step 2 — Syllabus</div>
+                  {phase2Done ? (
+                    <span className="text-xs font-medium text-emerald-400">Done</span>
+                  ) : null}
+                </div>
                 <p className="text-xs text-slate-400">
                   One upload: we read the PDF, extract deadlines, infer Fall/Spring when possible,
                   suggest term dates, add a course summary for Q&amp;A, and index the full syllabus.
                   This can take a minute — stay on this page until it finishes.
                 </p>
+                {phase < 2 ? (
+                  <p className="text-xs text-amber-200/90">Finish step 1 to enable upload.</p>
+                ) : null}
                 {syllabusBusy ? (
                   <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
                     {syllabusBusy}
                   </div>
                 ) : null}
-                <label className="text-sm text-slate-300 hover:text-white cursor-pointer rounded-xl border border-white/15 bg-white/[0.03] px-4 py-2 inline-block">
+                <label
+                  className={[
+                    'text-sm rounded-xl border px-4 py-2 inline-block',
+                    phase === 2 && !loading && syllabusBusy === null && classId && sessionId
+                      ? 'text-slate-300 hover:text-white cursor-pointer border-white/15 bg-white/[0.03]'
+                      : 'text-slate-500 cursor-not-allowed border-white/10 bg-white/[0.02]',
+                  ].join(' ')}
+                >
                   <input
                     type="file"
                     accept=".pdf,application/pdf"
                     className="hidden"
-                    disabled={loading || syllabusBusy !== null || !classId || !sessionId}
+                    disabled={
+                      loading || syllabusBusy !== null || !classId || !sessionId || phase !== 2
+                    }
                     onChange={async (e) => {
                       const f = e.target.files?.[0];
                       e.target.value = '';
@@ -425,129 +474,165 @@ export default function ChatClient() {
                   Upload syllabus PDF
                 </label>
               </div>
-            ) : null}
 
-            {phase === 3 ? (
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-4">
-                <div className="text-sm font-semibold text-white">Phase 3 — Semester timeline</div>
-                <p className="text-xs text-slate-300 leading-relaxed">{termHint}</p>
-                {importedDeadlineCount > 0 ? (
-                  <p className="text-xs text-emerald-300/90">
-                    Imported <span className="font-mono">{importedDeadlineCount}</span> deadline
-                    {importedDeadlineCount === 1 ? '' : 's'} from your syllabus.
+              <div
+                className={[
+                  'rounded-2xl border border-white/10 bg-black/20 p-4 space-y-4',
+                  phase < 3 ? 'opacity-70' : '',
+                ].join(' ')}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-semibold text-white">Step 3 — Semester timeline</div>
+                  {phase3Done ? (
+                    <span className="text-xs font-medium text-emerald-400">Done</span>
+                  ) : null}
+                </div>
+                {phase < 3 ? (
+                  <p className="text-xs text-amber-200/90">
+                    Finish step 2 (syllabus upload) to confirm dates and generate your plan.
+                  </p>
+                ) : phase >= 4 ? (
+                  <div className="text-xs text-slate-400 space-y-1">
+                    <div>
+                      Saved timeline:{' '}
+                      <span className="text-slate-200">
+                        {savedTz || '—'} · {savedStart || '—'} → {savedEnd || '—'}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-slate-300 leading-relaxed">{termHint}</p>
+                    {importedDeadlineCount > 0 ? (
+                      <p className="text-xs text-emerald-300/90">
+                        Imported <span className="font-mono">{importedDeadlineCount}</span>{' '}
+                        deadline
+                        {importedDeadlineCount === 1 ? '' : 's'} from your syllabus.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-400">
+                        No deadlines were auto-detected — you can add them later from your class
+                        page.
+                      </p>
+                    )}
+
+                    <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Term
+                      </div>
+                      <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="term"
+                          checked={termChoice === 'from_syllabus'}
+                          disabled={!syllabusSnapshot?.start || !syllabusSnapshot?.end}
+                          onChange={() => {
+                            setTermChoice('from_syllabus');
+                            applyTermChoice('from_syllabus', syllabusSnapshot);
+                          }}
+                        />
+                        Use dates from syllabus
+                        {syllabusSnapshot?.start && syllabusSnapshot?.end ? (
+                          <span className="text-xs text-slate-500">
+                            ({syllabusSnapshot.start} → {syllabusSnapshot.end})
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-500">(not available)</span>
+                        )}
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="term"
+                          checked={termChoice === 'fall'}
+                          onChange={() => {
+                            setTermChoice('fall');
+                            applyTermChoice('fall', syllabusSnapshot);
+                          }}
+                        />
+                        Fall — default Aug 1 → Dec 20
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="term"
+                          checked={termChoice === 'spring'}
+                          onChange={() => {
+                            setTermChoice('spring');
+                            applyTermChoice('spring', syllabusSnapshot);
+                          }}
+                        />
+                        Spring — default Jan 1 → Jun 30
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <input
+                        value={timezone}
+                        onChange={(e) => setTimezone(e.target.value)}
+                        placeholder="Timezone (e.g. America/New_York)"
+                        className="bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/20"
+                      />
+                      <input
+                        value={semesterStart}
+                        onChange={(e) => setSemesterStart(e.target.value)}
+                        placeholder="Start (YYYY-MM-DD)"
+                        className="bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/20"
+                      />
+                      <input
+                        value={semesterEnd}
+                        onChange={(e) => setSemesterEnd(e.target.value)}
+                        placeholder="End (YYYY-MM-DD)"
+                        className="bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/20"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        disabled={
+                          loading ||
+                          !timezone.trim() ||
+                          !semesterStart.trim() ||
+                          !semesterEnd.trim()
+                        }
+                        onClick={() =>
+                          void sendRaw(
+                            JSON.stringify({
+                              timezone: timezone.trim(),
+                              semester_start: semesterStart.trim(),
+                              semester_end: semesterEnd.trim(),
+                            })
+                          )
+                        }
+                        className="rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                      >
+                        Save &amp; generate plan
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Upload readings, lecture notes, or slides later from your class dashboard.
+                    </p>
+                  </>
+                )}
+              </div>
+
+              <div
+                className={[
+                  'rounded-2xl border border-white/10 bg-black/20 p-4 space-y-2',
+                  phase < 4 ? 'opacity-70' : '',
+                ].join(' ')}
+              >
+                <div className="text-sm font-semibold text-white">Step 4 — Study plan</div>
+                {phase < 4 ? (
+                  <p className="text-sm text-slate-400">
+                    Your study plan generates here after you save the semester in step 3.
                   </p>
                 ) : (
-                  <p className="text-xs text-slate-400">
-                    No deadlines were auto-detected — you can add them later from your class page.
-                  </p>
-                )}
-
-                <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Term
+                  <div className="text-sm text-slate-300">
+                    {chat?.complete ? 'Complete. Redirecting…' : 'Generating your study plan…'}
                   </div>
-                  <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="term"
-                      checked={termChoice === 'from_syllabus'}
-                      disabled={!syllabusSnapshot?.start || !syllabusSnapshot?.end}
-                      onChange={() => {
-                        setTermChoice('from_syllabus');
-                        applyTermChoice('from_syllabus', syllabusSnapshot);
-                      }}
-                    />
-                    Use dates from syllabus
-                    {syllabusSnapshot?.start && syllabusSnapshot?.end ? (
-                      <span className="text-xs text-slate-500">
-                        ({syllabusSnapshot.start} → {syllabusSnapshot.end})
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-500">(not available)</span>
-                    )}
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="term"
-                      checked={termChoice === 'fall'}
-                      onChange={() => {
-                        setTermChoice('fall');
-                        applyTermChoice('fall', syllabusSnapshot);
-                      }}
-                    />
-                    Fall — default Aug 1 → Dec 20
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="term"
-                      checked={termChoice === 'spring'}
-                      onChange={() => {
-                        setTermChoice('spring');
-                        applyTermChoice('spring', syllabusSnapshot);
-                      }}
-                    />
-                    Spring — default Jan 1 → Jun 30
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  <input
-                    value={timezone}
-                    onChange={(e) => setTimezone(e.target.value)}
-                    placeholder="Timezone (e.g. America/New_York)"
-                    className="bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/20"
-                  />
-                  <input
-                    value={semesterStart}
-                    onChange={(e) => setSemesterStart(e.target.value)}
-                    placeholder="Start (YYYY-MM-DD)"
-                    className="bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/20"
-                  />
-                  <input
-                    value={semesterEnd}
-                    onChange={(e) => setSemesterEnd(e.target.value)}
-                    placeholder="End (YYYY-MM-DD)"
-                    className="bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/20"
-                  />
-                </div>
-                <div className="flex justify-end">
-                  <button
-                    disabled={
-                      loading ||
-                      !timezone.trim() ||
-                      !semesterStart.trim() ||
-                      !semesterEnd.trim()
-                    }
-                    onClick={() =>
-                      void sendRaw(
-                        JSON.stringify({
-                          timezone: timezone.trim(),
-                          semester_start: semesterStart.trim(),
-                          semester_end: semesterEnd.trim(),
-                        })
-                      )
-                    }
-                    className="rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold disabled:opacity-60"
-                  >
-                    Save &amp; generate plan
-                  </button>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Upload readings, lecture notes, or slides later from your class dashboard.
-                </p>
+                )}
               </div>
-            ) : null}
-
-            {phase === 4 ? (
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-2">
-                <div className="text-sm font-semibold text-white">Phase 4 — Study plan</div>
-                <div className="text-sm text-slate-300">
-                  {chat?.complete ? 'Complete. Redirecting…' : 'Generating your study plan…'}
-                </div>
-              </div>
-            ) : null}
+            </div>
           </div>
         </main>
       </div>
