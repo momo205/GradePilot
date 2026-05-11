@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import uuid
 
 from google.api_core.exceptions import ResourceExhausted
 from google import genai
@@ -51,6 +52,79 @@ class RagAnswerOut(BaseModel):
     sources: list[RagSourceOut]
 
 
+_SNIPPET_MAX_CHARS = 240
+
+
+def _normalize_for_citation_match(text: str) -> str:
+    """Collapse whitespace and case-fold for substring checks."""
+    return " ".join(text.split()).casefold()
+
+
+def verify_rag_sources(
+    *, sources: list[RagSourceOut], chunks: list[RetrievedChunk]
+) -> list[RagSourceOut]:
+    """Keep only sources that map to a retrieved chunk and whose snippet appears in chunk text.
+
+    Deduplicates by (document_id, chunk_index), first verified occurrence wins.
+    Raises RagAnswerError if the model supplied no sources or none could be verified.
+    """
+    if not sources:
+        raise RagAnswerError(
+            "Model returned no sources; citations are required for RAG answers."
+        )
+
+    allow: dict[tuple[str, int], RetrievedChunk] = {
+        (str(c.document_id), c.chunk_index): c for c in chunks
+    }
+    seen_keys: set[tuple[str, int]] = set()
+    verified: list[RagSourceOut] = []
+
+    for src in sources:
+        try:
+            doc_uuid = uuid.UUID(str(src.document_id).strip())
+        except ValueError:
+            continue
+        key = (str(doc_uuid), int(src.chunk_index))
+        chunk = allow.get(key)
+        if chunk is None:
+            continue
+        if key in seen_keys:
+            continue
+
+        norm_snip = _normalize_for_citation_match(src.snippet)
+        if not norm_snip:
+            continue
+        norm_chunk = _normalize_for_citation_match(chunk.chunk_text)
+        if norm_snip not in norm_chunk:
+            continue
+
+        seen_keys.add(key)
+        snippet_out = src.snippet.strip()
+        if len(snippet_out) > _SNIPPET_MAX_CHARS:
+            snippet_out = snippet_out[:_SNIPPET_MAX_CHARS].rstrip()
+
+        verified.append(
+            RagSourceOut(
+                document_id=str(chunk.document_id),
+                filename=chunk.filename,
+                document_type=chunk.document_type,
+                chunk_index=chunk.chunk_index,
+                snippet=snippet_out,
+            )
+        )
+
+    if not verified:
+        logger.warning(
+            "rag_answer_citations_unverified model_sources=%s chunks=%s",
+            len(sources),
+            len(chunks),
+        )
+        raise RagAnswerError(
+            "Model citations could not be verified against retrieved materials."
+        )
+    return verified
+
+
 def _build_prompt(*, question: str, chunks: list[RetrievedChunk]) -> str:
     sources_text: list[str] = []
     for i, c in enumerate(chunks, start=1):
@@ -78,7 +152,8 @@ Return ONLY valid JSON matching this schema:
 Rules:
 - The answer must be grounded in sources.
 - sources must include only the sources you actually used.
-- snippet should be a short quote/summary (max ~240 chars) from that source.
+- snippet must be a verbatim excerpt from that source (it must appear in the source
+  text aside from whitespace differences); max ~{_SNIPPET_MAX_CHARS} chars.
 - No markdown, no extra text.
 
 Question:
@@ -113,22 +188,10 @@ def generate_rag_answer(*, question: str, chunks: list[RetrievedChunk]) -> RagAn
         logger.info("rag_answer_llm_response model=%s chars=%s", model_name, len(raw))
         data = json.loads(raw)
         parsed = RagAnswerOut.model_validate(data)
-
-        if not parsed.sources:
-            parsed = RagAnswerOut(
-                answer=parsed.answer,
-                sources=[
-                    RagSourceOut(
-                        document_id=str(c.document_id),
-                        filename=c.filename,
-                        document_type=c.document_type,
-                        chunk_index=c.chunk_index,
-                        snippet=(c.chunk_text.strip()[:240] or "(empty)").strip(),
-                    )
-                    for c in chunks[:3]
-                ],
-            )
-        return parsed
+        verified_sources = verify_rag_sources(sources=parsed.sources, chunks=chunks)
+        return RagAnswerOut(answer=parsed.answer, sources=verified_sources)
+    except RagAnswerError:
+        raise
     except (json.JSONDecodeError, ValidationError) as e:
         logger.warning(
             "rag_answer_parse_failed err=%s preview=%r", e.__class__.__name__, raw[:300]
