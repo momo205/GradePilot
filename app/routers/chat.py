@@ -265,7 +265,7 @@ def post_message(
             out_class_id = uuid.UUID(raw_class_id)
         except ValueError:
             out_class_id = None
-    complete = bool(state_json.get("complete")) or str(state_json.get("phase")) == "5"
+    complete = bool(state_json.get("complete")) or str(state_json.get("phase")) == "4"
 
     return ChatReplyOut(
         session=ChatSessionOut.model_validate(sess),

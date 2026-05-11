@@ -32,7 +32,7 @@ def run_onboarding_step(
 ) -> OnboardingResult:
     """Deterministic onboarding used by tests + UI.
 
-    Phases are integers 1–5 (see ``onboarding_gate.initial_state``).
+    Phases are integers 1–4: title → syllabus upload (API) → timeline → generating.
     """
     assistant_message, st, tool_actions = run_onboarding_gate(
         state=state, user_message=user_message

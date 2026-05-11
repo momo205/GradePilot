@@ -341,6 +341,22 @@ class DeadlineImportOut(BaseModel):
     created: int
 
 
+class SyllabusOnboardingOut(BaseModel):
+    """Result of a single syllabus upload during class onboarding (parse once, one LLM pass)."""
+
+    deadlines_created: int
+    syllabus_chunks: int
+    course_summary_chunks: int
+    course_summary_preview: str = Field(default="", max_length=500)
+    suggested_timezone: str | None = None
+    suggested_semester_start: str | None = None
+    suggested_semester_end: str | None = None
+    suggested_semester_term: str | None = Field(
+        default=None,
+        description="fall or spring when inferred from the syllabus",
+    )
+
+
 class StudyAvailabilityBlock(BaseModel):
     day: str = Field(min_length=1, max_length=20)  # e.g. Mon, Tuesday
     start_time: str = Field(min_length=1, max_length=10)  # e.g. 17:00

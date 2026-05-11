@@ -290,6 +290,50 @@ export function updateDeadline(classId: string, deadlineId: string, payload: { c
   });
 }
 
+export type SyllabusOnboardingOut = {
+  deadlines_created: number;
+  syllabus_chunks: number;
+  course_summary_chunks: number;
+  course_summary_preview: string;
+  suggested_timezone: string | null;
+  suggested_semester_start: string | null;
+  suggested_semester_end: string | null;
+  suggested_semester_term: string | null;
+};
+
+/** Single syllabus upload: deadlines + suggested term dates + RAG (syllabus + course summary). */
+export async function uploadOnboardingSyllabus(
+  classId: string,
+  file: File,
+  chatSessionId: string
+): Promise<SyllabusOnboardingOut> {
+  const token = await getAccessToken();
+  const body = new FormData();
+  body.append('file', file, file.name);
+  body.append('chat_session_id', chatSessionId);
+  const res = await fetch(`${BACKEND_URL}/classes/${classId}/onboarding/syllabus`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body,
+  });
+  const contentType = res.headers.get('content-type') ?? '';
+  const parsed = contentType.includes('application/json')
+    ? await res.json().catch(() => null)
+    : await res.text().catch(() => null);
+  if (!res.ok) {
+    const message =
+      (parsed &&
+        typeof parsed === 'object' &&
+        'detail' in parsed &&
+        String((parsed as ErrorBody)?.detail ?? '')) ||
+      `Request failed (${res.status})`;
+    throw new BackendError(String(message), res.status, parsed);
+  }
+  return parsed as SyllabusOnboardingOut;
+}
+
 export function importDeadlinesFromSyllabus(classId: string, file: File) {
   return (async () => {
     const token = await getAccessToken();
