@@ -209,6 +209,27 @@ class PracticeGenerateOut(BaseModel):
     questions: list[PracticeQuestion]
 
 
+LearningResourceDestination = Literal["youtube", "web"]
+
+
+class LearningResourceItem(BaseModel):
+    """One suggested search the student can open on YouTube or the web."""
+
+    title: str = Field(min_length=1, max_length=200)
+    rationale: str = Field(min_length=1, max_length=800)
+    destination: LearningResourceDestination
+    search_query: str = Field(min_length=1, max_length=300)
+
+
+class LearningResourcesAI(BaseModel):
+    items: list[LearningResourceItem] = Field(min_length=5, max_length=8)
+
+
+class LearningResourcesOut(BaseModel):
+    items: list[LearningResourceItem]
+    model: str
+
+
 class SummariseRequest(BaseModel):
     filename: str = Field(min_length=1, max_length=255)
     raw_text: str = Field(min_length=1)

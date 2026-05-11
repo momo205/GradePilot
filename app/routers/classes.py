@@ -24,6 +24,7 @@ from app.schemas import (
     DeadlineImportOut,
     DeadlineUpdate,
     GradeBookState,
+    LearningResourcesOut,
     NotesCreate,
     NotesOut,
     PracticeGenerateOut,
@@ -40,6 +41,11 @@ from app.services.deadlines.extract import (
     extract_deadlines_from_text,
 )
 from app.services.pdf_text import extract_text_from_pdf_bytes
+from app.services.learning_resources import (
+    LearningResourcesError,
+    LearningResourcesRateLimitError,
+    generate_learning_resources,
+)
 from app.services.practice import (
     PracticeGenerationError,
     PracticeRateLimitError,
@@ -345,6 +351,45 @@ def generate_practice(
     except PracticeGenerationError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return PracticeGenerateOut(questions=questions)
+
+
+@router.post("/{class_id}/learning-resources", response_model=LearningResourcesOut)
+def generate_learning_resources_endpoint(
+    class_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> LearningResourcesOut:
+    user_id = _user_uuid(user)
+    clazz = crud.get_class(db=db, user_id=user_id, class_id=class_id)
+    if clazz is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+    notes_list = crud.list_notes(db=db, user_id=user_id, class_id=class_id)
+    if not notes_list:
+        raise HTTPException(status_code=400, detail="No notes available for class")
+    notes_ordered = sorted(notes_list, key=lambda n: n.created_at)
+    segments: list[tuple[str, str]] = []
+    for i, n in enumerate(notes_ordered, start=1):
+        label = f"Lecture {i}"
+        text = n.notes_text
+        if len(text) > _PRACTICE_NOTE_MAX_CHARS:
+            text = (
+                text[:_PRACTICE_NOTE_MAX_CHARS]
+                + "\n\n[...truncated for question generation]"
+            )
+        segments.append((label, text))
+    try:
+        items, model_name = generate_learning_resources(
+            class_title=clazz.title,
+            note_segments=segments,
+        )
+    except LearningResourcesRateLimitError as e:
+        headers = {}
+        if getattr(e, "retry_after_seconds", None):
+            headers["Retry-After"] = str(e.retry_after_seconds)
+        raise HTTPException(status_code=429, detail=str(e), headers=headers)
+    except LearningResourcesError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return LearningResourcesOut(items=items, model=model_name)
 
 
 @router.post("/{class_id}/study-plan", response_model=StudyPlanOut)

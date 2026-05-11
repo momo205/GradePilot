@@ -309,6 +309,57 @@ def test_classes_notes_deadlines_and_plans_endpoints(
     assert r.status_code == 200
     assert len(r.json()["questions"]) == 1
 
+    from app.schemas import LearningResourceItem
+
+    def _fake_generate_learning_resources(
+        *args: Any, **kwargs: Any
+    ) -> tuple[list[LearningResourceItem], str]:
+        items = [
+            LearningResourceItem(
+                title="SQL joins",
+                rationale="Matches your notes on relational algebra.",
+                destination="youtube",
+                search_query="sql joins explained",
+            ),
+            LearningResourceItem(
+                title="PostgreSQL docs",
+                rationale="Official reference for query syntax.",
+                destination="web",
+                search_query="postgresql SELECT documentation",
+            ),
+            LearningResourceItem(
+                title="Normalization",
+                rationale="Core database design topic.",
+                destination="youtube",
+                search_query="database normalization 3NF",
+            ),
+            LearningResourceItem(
+                title="Indexes",
+                rationale="Performance and query plans.",
+                destination="web",
+                search_query="database index B-tree explained",
+            ),
+            LearningResourceItem(
+                title="Transactions",
+                rationale="ACID properties from your course.",
+                destination="youtube",
+                search_query="ACID database transactions",
+            ),
+        ]
+        return items, "fake-model"
+
+    monkeypatch.setattr(
+        classes_router,
+        "generate_learning_resources",
+        _fake_generate_learning_resources,
+    )
+
+    r = client.post(f"/classes/{class_id}/learning-resources")
+    assert r.status_code == 200
+    lr = r.json()
+    assert lr["model"] == "fake-model"
+    assert len(lr["items"]) == 5
+
     # Mock study plan generation
     def _fake_generate_study_plan(
         *args: Any, **kwargs: Any
