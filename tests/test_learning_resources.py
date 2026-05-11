@@ -56,21 +56,38 @@ def lr_client(
 
 
 def _five_items() -> list[LearningResourceItem]:
-    base = [
-        ("Python lists tutorial", "youtube", "python lists explained"),
-        ("Official Python docs", "web", "python list documentation site:docs.python.org"),
-        ("Big-O basics video", "youtube", "big o notation computer science"),
-        ("MIT OCW algorithms", "web", "MIT introduction algorithms reading"),
-        ("Recursion walkthrough", "youtube", "recursion programming tutorial"),
-    ]
+    rationale = "Grounded in your notes on data structures."
     return [
         LearningResourceItem(
-            title=t,
-            rationale="Grounded in your notes on data structures.",
-            destination=d,
-            search_query=q,
-        )
-        for t, d, q in base
+            title="Python lists tutorial",
+            rationale=rationale,
+            destination="youtube",
+            search_query="python lists explained",
+        ),
+        LearningResourceItem(
+            title="Official Python docs",
+            rationale=rationale,
+            destination="web",
+            search_query="python list documentation site:docs.python.org",
+        ),
+        LearningResourceItem(
+            title="Big-O basics video",
+            rationale=rationale,
+            destination="youtube",
+            search_query="big o notation computer science",
+        ),
+        LearningResourceItem(
+            title="MIT OCW algorithms",
+            rationale=rationale,
+            destination="web",
+            search_query="MIT introduction algorithms reading",
+        ),
+        LearningResourceItem(
+            title="Recursion walkthrough",
+            rationale=rationale,
+            destination="youtube",
+            search_query="recursion programming tutorial",
+        ),
     ]
 
 
