@@ -135,4 +135,3 @@ def test_run_onboarding_syllabus_bootstrap_happy_path(
     assert ingest_calls[0][0] == "syllabus"
     assert any(dt == "course_summary" for dt, _fn in ingest_calls)
     assert len(created_deadlines) == 2
-

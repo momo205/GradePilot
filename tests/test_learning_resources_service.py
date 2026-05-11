@@ -13,9 +13,7 @@ def _make_mock_response(text: str) -> MagicMock:
     return resp
 
 
-def _patch_genai(
-    *, text: str | None = None, exc: Exception | None = None
-) -> MagicMock:
+def _patch_genai(*, text: str | None = None, exc: Exception | None = None) -> MagicMock:
     genai_mock = MagicMock()
     client = genai_mock.Client.return_value
     if exc is not None:
@@ -114,4 +112,3 @@ def test_generate_learning_resources_rate_limit_error(
             )
 
     assert e.value.retry_after_seconds == 1
-
