@@ -41,7 +41,9 @@ def test_learning_resources_parses_retry_after_seconds() -> None:
     assert svc._parse_retry_after_seconds("Please retry in 2.01s") == 3
 
 
-def test_generate_learning_resources_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_generate_learning_resources_happy_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from app.services import learning_resources as svc
 
     payload = json.dumps(
@@ -94,7 +96,9 @@ def test_generate_learning_resources_happy_path(monkeypatch: pytest.MonkeyPatch)
     assert items[0].title
 
 
-def test_generate_learning_resources_rate_limit_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_generate_learning_resources_rate_limit_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from app.services import learning_resources as svc
 
     exc = ResourceExhausted("Please retry in 0.1s.")

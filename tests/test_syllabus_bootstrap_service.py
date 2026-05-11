@@ -84,7 +84,11 @@ def test_run_onboarding_syllabus_bootstrap_happy_path(
             "semester_term": None,
         }
     )
-    monkeypatch.setattr(svc, "extract_syllabus_bootstrap_ai", lambda **_kw: parsed)
+    monkeypatch.setattr(
+        svc,
+        "extract_syllabus_bootstrap_ai",
+        lambda **_kw: parsed,
+    )
 
     ingest_calls: list[tuple[str, str]] = []
 
