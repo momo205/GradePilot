@@ -54,4 +54,3 @@ def test_merge_description_replaces_class_section() -> None:
     )
     assert "- New task" in updated
     assert "- Old task" not in updated
-

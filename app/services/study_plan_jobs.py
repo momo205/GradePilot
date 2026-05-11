@@ -3,11 +3,9 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.core.config import get_settings
 from app.db import crud
 from app.db.session import get_engine
 from app.routers.classes import _compute_plan_horizon
@@ -212,7 +210,9 @@ def run_study_plan_job(*, user_id: uuid.UUID, job_id: uuid.UUID) -> None:
                     now_utc=datetime.now(timezone.utc),
                 )
         except Exception:
-            logger.exception("study_plan_job_calendar_schedule_failed job_id=%s", job_id)
+            logger.exception(
+                "study_plan_job_calendar_schedule_failed job_id=%s", job_id
+            )
 
         _set_job(
             db=db,
@@ -243,4 +243,3 @@ def run_study_plan_job(*, user_id: uuid.UUID, job_id: uuid.UUID) -> None:
         logger.exception("study_plan_job_failed job_id=%s", job_id)
     finally:
         db.close()
-
