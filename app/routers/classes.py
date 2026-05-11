@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,7 @@ from app.schemas import (
     DeadlineCreate,
     DeadlineOut,
     DeadlineImportOut,
+    SyllabusOnboardingOut,
     DeadlineUpdate,
     GradeBookState,
     LearningResourcesOut,
@@ -40,6 +41,8 @@ from app.services.deadlines.extract import (
     DeadlineExtractRateLimitError,
     extract_deadlines_from_text,
 )
+from app.services.rag.embeddings import EmbeddingsError
+from app.services.syllabus.onboarding_bootstrap import run_onboarding_syllabus_bootstrap
 from app.services.pdf_text import extract_text_from_pdf_bytes
 from app.services.learning_resources import (
     LearningResourcesError,
@@ -715,9 +718,122 @@ async def import_deadlines_from_syllabus_endpoint(
         )
         created += 1
 
-    if created > 0:
-        await _fire_replanner_after_write(
-            user=user, class_id=class_id, trigger="deadline_imported"
+    return DeadlineImportOut(created=created)
+
+
+@router.post(
+    "/{class_id}/onboarding/syllabus",
+    response_model=SyllabusOnboardingOut,
+)
+async def onboarding_syllabus_bootstrap_endpoint(
+    class_id: uuid.UUID,
+    file: UploadFile = File(...),
+    chat_session_id: uuid.UUID | None = Form(default=None),
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SyllabusOnboardingOut:
+    """Single PDF read: deadlines + suggested term dates + RAG (syllabus + course summary)."""
+    user_id = _user_uuid(user)
+    clazz = crud.get_class(db=db, user_id=user_id, class_id=class_id)
+    if clazz is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    if chat_session_id is not None:
+        sess = crud.get_chat_session(db=db, user_id=user_id, session_id=chat_session_id)
+        if sess is None:
+            raise HTTPException(status_code=404, detail="Chat session not found")
+        st_row = crud.get_chat_state(db=db, user_id=user_id, session_id=chat_session_id)
+        st_json: dict[str, Any] = dict(st_row.state_json or {}) if st_row else {}
+        raw_cid = st_json.get("class_id")
+        raw_phase = st_json.get("phase")
+        if isinstance(raw_phase, int):
+            phase_num = raw_phase
+        elif isinstance(raw_phase, str) and raw_phase.strip().isdigit():
+            phase_num = int(raw_phase.strip())
+        else:
+            phase_num = 1
+        if not (
+            isinstance(raw_cid, str) and raw_cid == str(class_id) and phase_num == 2
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Syllabus onboarding is only allowed in chat phase 2 for this class.",
+            )
+
+    name = (file.filename or "").strip() or "syllabus.pdf"
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if not name.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Upload a .pdf file")
+
+    try:
+        result = run_onboarding_syllabus_bootstrap(
+            db=db,
+            user_id=user_id,
+            class_id=class_id,
+            filename=name,
+            pdf_bytes=data,
+        )
+    except DeadlineExtractRateLimitError as e:
+        headers = {}
+        if getattr(e, "retry_after_seconds", None):
+            headers["Retry-After"] = str(e.retry_after_seconds)
+        raise HTTPException(status_code=429, detail=str(e), headers=headers)
+    except DeadlineExtractError as e:
+        status_code = int(getattr(e, "status_code", 502) or 502)
+        raise HTTPException(status_code=status_code, detail=str(e))
+    except EmbeddingsError as e:
+        status_code = int(getattr(e, "status_code", 502) or 502)
+        raise HTTPException(
+            status_code=status_code,
+            detail=(
+                f"Embeddings failed: {e}. "
+                "Check GOOGLE_EMBEDDING_MODEL and GOOGLE_API_KEY."
+            ),
+        ) from e
+    except ProgrammingError as e:
+        if "does not exist" in str(e.orig) if getattr(e, "orig", None) else str(e):
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "RAG tables are missing in the database. Run "
+                    "docs/db/002_rag_documents.sql, then retry."
+                ),
+            ) from e
+        raise
+
+    preview = (result.course_summary or "")[:400]
+
+    if chat_session_id is not None:
+        st_row = crud.get_chat_state(db=db, user_id=user_id, session_id=chat_session_id)
+        merged: dict[str, Any] = dict(st_row.state_json or {}) if st_row else {}
+        merged["phase"] = 3
+        merged["suggested_timezone"] = result.suggested_timezone
+        merged["suggested_semester_start"] = result.suggested_semester_start
+        merged["suggested_semester_end"] = result.suggested_semester_end
+        merged["suggested_semester_term"] = result.suggested_semester_term
+        merged["deadlines_imported_count"] = result.deadlines_created
+        if result.suggested_timezone:
+            merged["timezone"] = result.suggested_timezone
+        if result.suggested_semester_start:
+            merged["semester_start"] = result.suggested_semester_start
+        if result.suggested_semester_end:
+            merged["semester_end"] = result.suggested_semester_end
+        crud.update_chat_state(
+            db=db,
+            user_id=user_id,
+            session_id=chat_session_id,
+            state_json=merged,
         )
 
-    return DeadlineImportOut(created=created)
+    return SyllabusOnboardingOut(
+        deadlines_created=result.deadlines_created,
+        syllabus_chunks=result.syllabus_chunks,
+        course_summary_chunks=result.course_summary_chunks,
+        course_summary_preview=preview,
+        suggested_timezone=result.suggested_timezone,
+        suggested_semester_start=result.suggested_semester_start,
+        suggested_semester_end=result.suggested_semester_end,
+        suggested_semester_term=result.suggested_semester_term,
+    )

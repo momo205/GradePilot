@@ -25,7 +25,6 @@ def client() -> Generator[TestClient, None, None]:
     )
     Base.metadata.create_all(bind=engine)
     SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-
     user_id = uuid.uuid4()
 
     def _override_get_db() -> Generator[Session, None, None]:
