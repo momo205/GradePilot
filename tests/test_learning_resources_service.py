@@ -13,7 +13,9 @@ def _make_mock_response(text: str) -> MagicMock:
     return resp
 
 
-def _patch_genai(*, text: str | None = None, exc: Exception | None = None) -> MagicMock:
+def _patch_genai(
+    *, text: str | None = None, exc: Exception | None = None
+) -> MagicMock:
     genai_mock = MagicMock()
     client = genai_mock.Client.return_value
     if exc is not None:
@@ -79,7 +81,9 @@ def test_generate_learning_resources_happy_path(monkeypatch: pytest.MonkeyPatch)
         }
     )
     monkeypatch.setattr(svc, "genai", _patch_genai(text=payload))
-    with patch("app.services.learning_resources.get_settings", return_value=_mock_settings()):
+    with patch(
+        "app.services.learning_resources.get_settings", return_value=_mock_settings()
+    ):
         items, model = svc.generate_learning_resources(
             class_title="CS101",
             note_segments=[("Lecture 1", "Big-O and recursion basics.")],
@@ -96,7 +100,9 @@ def test_generate_learning_resources_rate_limit_error(monkeypatch: pytest.Monkey
     exc = ResourceExhausted("Please retry in 0.1s.")
     monkeypatch.setattr(svc, "genai", _patch_genai(exc=exc))
 
-    with patch("app.services.learning_resources.get_settings", return_value=_mock_settings()):
+    with patch(
+        "app.services.learning_resources.get_settings", return_value=_mock_settings()
+    ):
         with pytest.raises(svc.LearningResourcesRateLimitError) as e:
             svc.generate_learning_resources(
                 class_title="CS101",

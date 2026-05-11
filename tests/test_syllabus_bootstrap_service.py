@@ -21,7 +21,9 @@ def test_syllabus_bootstrap_helpers() -> None:
     assert svc._infer_term_from_start_date("2026-02-01") == "spring"
     assert svc._infer_term_from_start_date("2026-07-01") is None
 
-    tz, start, end = svc._coerce_timeline_dates("  America/New_York  ", "2026-09-01", "bad")
+    tz, start, end = svc._coerce_timeline_dates(
+        "  America/New_York  ", "2026-09-01", "bad"
+    )
     assert tz == "America/New_York"
     assert start == "2026-09-01"
     assert end is None
@@ -86,7 +88,13 @@ def test_run_onboarding_syllabus_bootstrap_happy_path(
 
     ingest_calls: list[tuple[str, str]] = []
 
-    def _fake_ingest_raw_text(*, document_type: str, filename: str, raw_text: str, **_kw):
+    def _fake_ingest_raw_text(
+        *,
+        document_type: str,
+        filename: str,
+        raw_text: str,
+        **_kw: object,
+    ) -> MagicMock:
         ingest_calls.append((document_type, filename))
         # mimic ingest result
         return MagicMock(chunks_created=3 if document_type == "syllabus" else 1)
@@ -96,11 +104,13 @@ def test_run_onboarding_syllabus_bootstrap_happy_path(
 
     created_deadlines: list[dict[str, object]] = []
 
-    def _fake_create_deadline(**kwargs):
+    def _fake_create_deadline(**kwargs: object) -> MagicMock:
         created_deadlines.append(kwargs)
         return MagicMock()
 
-    monkeypatch.setattr(svc.crud, "create_deadline", _fake_create_deadline)
+    from app.db import crud as db_crud
+
+    monkeypatch.setattr(db_crud, "create_deadline", _fake_create_deadline)
 
     out = svc.run_onboarding_syllabus_bootstrap(
         db=MagicMock(),
