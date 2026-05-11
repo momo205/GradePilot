@@ -12,6 +12,8 @@ export function NotesPanel({
   onSaveNotes,
   onImportDateAsDeadline,
   loading,
+  uploading,
+  uploadingLabel,
   summarising,
   notesSummary,
 }: {
@@ -24,6 +26,8 @@ export function NotesPanel({
   onSaveNotes: () => void;
   onImportDateAsDeadline?: (dueText: string) => void;
   loading: boolean;
+  uploading?: boolean;
+  uploadingLabel?: string | null;
   summarising: boolean;
   notesSummary: SummariseOut | null;
 }) {
@@ -65,7 +69,13 @@ export function NotesPanel({
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium">Add notes</p>
-          <label className="text-xs text-slate-300 hover:text-white cursor-pointer">
+          <div className="flex items-center gap-3">
+            {uploading ? (
+              <span className="text-xs text-slate-300">
+                {uploadingLabel || 'Uploading…'}
+              </span>
+            ) : null}
+            <label className="text-xs text-slate-300 hover:text-white cursor-pointer">
             <input
               type="file"
               className="hidden"
@@ -77,9 +87,11 @@ export function NotesPanel({
                 if (files.length === 0) return;
                 onUploadFiles(files);
               }}
+              disabled={Boolean(loading || uploading || summarising)}
             />
             Upload .txt/.md/.pdf
-          </label>
+            </label>
+          </div>
         </div>
 
         {summarising ? <div className="text-sm text-slate-300">Summarising…</div> : null}

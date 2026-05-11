@@ -24,7 +24,7 @@ from app.db import crud
 from app.services.google_calendar import (
     has_required_scopes,
     list_busy_blocks,
-    upsert_plan_day_event,
+    upsert_daily_study_session_event,
 )
 from app.services.scheduling.slot_finder import find_first_available_slot
 
@@ -149,27 +149,19 @@ def schedule_plan_day_sessions(
             continue
 
         day_label = str(day_item.get("day") or "").strip() or f"Day {day_index + 1}"
-        preview = ", ".join(tasks[:2])[:60] if tasks else ""
-        event_title = f"Study {class_title} — {day_label}" + (
-            f": {preview}" if preview else ""
-        )
-        event_description = (
-            f"{day_label}\n\nTasks:\n" + "\n".join(f"- {t}" for t in tasks)
-            if tasks
-            else day_label
-        )
+        date_local_iso = target_date.isoformat()
 
         try:
-            event = upsert_plan_day_event(
+            event = upsert_daily_study_session_event(
                 db=db,
                 user_id=str(user_id),
                 class_id=class_id,
-                plan_id=plan_id,
-                day_index=day_index,
-                title=event_title,
+                date_local_iso=date_local_iso,
+                day_label=day_label,
+                class_title=class_title,
+                tasks=tasks,
                 start=slot.start,
                 end=slot.end,
-                description=event_description,
             )
         except Exception as e:  # noqa: BLE001
             errors.append(

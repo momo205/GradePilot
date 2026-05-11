@@ -18,6 +18,7 @@ from app.db.models import (
     DocumentChunk,
     GoogleIntegration,
     StudyPlan,
+    StudyPlanJob,
     UserSettings,
 )
 
@@ -258,6 +259,75 @@ def get_latest_study_plan(
         .limit(1)
     )
     return db.execute(stmt).scalar_one_or_none()
+
+
+def create_study_plan_job(
+    *,
+    db: Session,
+    user_id: uuid.UUID,
+    class_id: uuid.UUID,
+    notes_id: uuid.UUID | None,
+) -> StudyPlanJob:
+    job = StudyPlanJob(
+        user_id=user_id,
+        class_id=class_id,
+        notes_id=notes_id,
+        status="queued",
+        phase="queued",
+        progress=0,
+        message=None,
+        error=None,
+        result_plan_id=None,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def get_study_plan_job(
+    *,
+    db: Session,
+    user_id: uuid.UUID,
+    job_id: uuid.UUID,
+) -> StudyPlanJob | None:
+    stmt = select(StudyPlanJob).where(
+        StudyPlanJob.id == job_id, StudyPlanJob.user_id == user_id
+    )
+    return db.execute(stmt).scalar_one_or_none()
+
+
+def update_study_plan_job(
+    *,
+    db: Session,
+    user_id: uuid.UUID,
+    job_id: uuid.UUID,
+    status: str | None = None,
+    phase: str | None = None,
+    progress: int | None = None,
+    message: str | None = None,
+    error: str | None = None,
+    result_plan_id: uuid.UUID | None = None,
+) -> StudyPlanJob | None:
+    job = get_study_plan_job(db=db, user_id=user_id, job_id=job_id)
+    if job is None:
+        return None
+    if status is not None:
+        job.status = status
+    if phase is not None:
+        job.phase = phase
+    if progress is not None:
+        job.progress = max(0, min(100, int(progress)))
+    if message is not None:
+        job.message = message
+    if error is not None:
+        job.error = error
+    if result_plan_id is not None:
+        job.result_plan_id = result_plan_id
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
 
 
 def get_next_deadline(

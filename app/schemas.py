@@ -178,6 +178,30 @@ class StudyPlanOut(BaseModel):
     scheduled_plan_sessions: list[dict[str, Any]] = []
 
 
+StudyPlanJobStatus = Literal["queued", "running", "succeeded", "failed"]
+
+
+class StudyPlanJobCreateOut(BaseModel):
+    job_id: uuid.UUID
+
+
+class StudyPlanJobOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    class_id: uuid.UUID
+    user_id: uuid.UUID
+    notes_id: uuid.UUID | None
+    status: StudyPlanJobStatus
+    phase: str
+    progress: int = Field(ge=0, le=100)
+    message: str | None = None
+    error: str | None = None
+    result_plan_id: uuid.UUID | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
 class StudyPlanAIItem(BaseModel):
     day: str
     tasks: list[str]

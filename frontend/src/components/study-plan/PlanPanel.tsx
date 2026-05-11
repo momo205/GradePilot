@@ -52,7 +52,7 @@ export function PlanPanel({
               onClick={onGenerate}
               className="rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold disabled:opacity-60 shrink-0"
             >
-              Generate plan
+              {loading ? 'Generating…' : 'Generate plan'}
             </button>
           </div>
 

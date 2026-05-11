@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,8 @@ from app.schemas import (
     PracticeGenerateOut,
     PracticeGenerateRequest,
     StudyPlanCreate,
+    StudyPlanJobCreateOut,
+    StudyPlanJobOut,
     StudyPlanOut,
     StudyPlanSemesterCreate,
     StudyPlanUpdate,
@@ -477,6 +479,54 @@ def create_study_plan_endpoint(
     out = StudyPlanOut.model_validate(plan)
     out.scheduled_plan_sessions = scheduled_sessions
     return out
+
+
+@router.post("/{class_id}/study-plan/jobs", response_model=StudyPlanJobCreateOut)
+def create_study_plan_job_endpoint(
+    class_id: uuid.UUID,
+    payload: StudyPlanCreate,
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StudyPlanJobCreateOut:
+    """Start async study plan generation and return a job id immediately."""
+    user_id = _user_uuid(user)
+    clazz = crud.get_class(db=db, user_id=user_id, class_id=class_id)
+    if clazz is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    notes_id: uuid.UUID | None = payload.notes_id
+    if notes_id is not None:
+        notes = crud.get_notes(db=db, user_id=user_id, notes_id=notes_id)
+        if notes is None or notes.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Notes not found")
+    else:
+        notes = crud.get_latest_notes(db=db, user_id=user_id, class_id=class_id)
+        if notes is None:
+            raise HTTPException(status_code=400, detail="No notes available for class")
+        notes_id = notes.id
+
+    job = crud.create_study_plan_job(
+        db=db, user_id=user_id, class_id=class_id, notes_id=notes_id
+    )
+
+    from app.services.study_plan_jobs import run_study_plan_job
+
+    background_tasks.add_task(run_study_plan_job, user_id=user_id, job_id=job.id)
+    return StudyPlanJobCreateOut(job_id=job.id)
+
+
+@router.get("/study-plan/jobs/{job_id}", response_model=StudyPlanJobOut)
+def get_study_plan_job_endpoint(
+    job_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StudyPlanJobOut:
+    user_id = _user_uuid(user)
+    job = crud.get_study_plan_job(db=db, user_id=user_id, job_id=job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return StudyPlanJobOut.model_validate(job)
 
 
 @router.post("/{class_id}/study-plan/semester", response_model=StudyPlanOut)

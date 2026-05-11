@@ -217,6 +217,8 @@ export default function StudyPlanClient() {
                 notesDraft={notesDraft}
                 onNotesDraftChange={setNotesDraft}
                 loading={loading}
+                uploading={loading}
+                uploadingLabel="Processing upload…"
                 summarising={summarising}
                 notesSummary={notesSummary}
                 onUploadFiles={async (files) => {
