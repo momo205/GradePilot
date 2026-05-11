@@ -59,8 +59,7 @@ export default function ChatClient() {
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [sessionLoading, setSessionLoading] = useState(false);
-  const [messageSending, setMessageSending] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syllabusBusy, setSyllabusBusy] = useState<string | null>(null);
 
@@ -113,7 +112,7 @@ export default function ChatClient() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setSessionLoading(true);
+      setLoading(true);
       setError(null);
       try {
         const forceNew =
@@ -130,7 +129,7 @@ export default function ChatClient() {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : 'Failed to load chat');
       } finally {
-        if (!cancelled) setSessionLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
@@ -143,30 +142,6 @@ export default function ChatClient() {
       router.push(`/classes/${chat.class_id}`);
     }
   }, [chat?.complete, chat?.class_id, router]);
-
-  // While the server generates the semester plan (background job), poll session state.
-  useEffect(() => {
-    if (!sessionId || !chat) return;
-    if (phase !== 4 || chat.complete) return;
-    const status = chat.state?.semester_plan_status;
-    if (status !== 'generating') return;
-
-    let cancelled = false;
-    const tick = async () => {
-      try {
-        const reply = await getChatSession(sessionId);
-        if (!cancelled) setChat(reply);
-      } catch {
-        /* next interval retries */
-      }
-    };
-    void tick();
-    const id = window.setInterval(() => void tick(), 2000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [sessionId, phase, chat?.complete, chat?.state?.semester_plan_status]);
 
   // Hydrate timeline fields when opening phase 3 from saved chat state (reload).
   useEffect(() => {
@@ -268,7 +243,7 @@ export default function ChatClient() {
     if (!sessionId) return;
     const c = content.trim();
     if (!c) return;
-    setMessageSending(true);
+    setLoading(true);
     setError(null);
     try {
       const out = await sendChatMessage(sessionId, c);
@@ -280,13 +255,9 @@ export default function ChatClient() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to send message');
     } finally {
-      setMessageSending(false);
+      setLoading(false);
     }
   }
-
-  const planGenFailed = chat?.state?.semester_plan_status === 'failed';
-  const planGenError =
-    typeof chat?.state?.semester_plan_error === 'string' ? chat.state.semester_plan_error : null;
 
   const termHint =
     inferredTermFromState === 'fall' || inferredTermFromState === 'spring' ? (
@@ -375,16 +346,10 @@ export default function ChatClient() {
                     {m.content}
                   </div>
                 ))
-              ) : sessionLoading ? (
-                <div className="text-sm text-slate-300 flex items-center gap-2">
-                  <span
-                    className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/25 border-t-white/90"
-                    aria-hidden
-                  />
+              ) : (
+                <div className="text-sm text-slate-300">
                   Loading your onboarding wizard…
                 </div>
-              ) : (
-                <div className="text-sm text-slate-300">No messages yet.</div>
               )}
             </div>
 
@@ -399,7 +364,7 @@ export default function ChatClient() {
                 />
                 <div className="flex justify-end">
                   <button
-                    disabled={sessionLoading || messageSending || classTitle.trim().length === 0}
+                    disabled={loading || classTitle.trim().length === 0}
                     onClick={() =>
                       void sendRaw(JSON.stringify({ class_title: classTitle.trim() }))
                     }
@@ -429,13 +394,7 @@ export default function ChatClient() {
                     type="file"
                     accept=".pdf,application/pdf"
                     className="hidden"
-                    disabled={
-                      sessionLoading ||
-                      messageSending ||
-                      syllabusBusy !== null ||
-                      !classId ||
-                      !sessionId
-                    }
+                    disabled={loading || syllabusBusy !== null || !classId || !sessionId}
                     onChange={async (e) => {
                       const f = e.target.files?.[0];
                       e.target.value = '';
@@ -471,14 +430,6 @@ export default function ChatClient() {
             {phase === 3 ? (
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-4">
                 <div className="text-sm font-semibold text-white">Phase 3 — Semester timeline</div>
-                {planGenFailed && planGenError ? (
-                  <div className="rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
-                    Study plan could not be generated: {planGenError}
-                    <span className="block text-xs text-rose-200/80 mt-1">
-                      Adjust dates if needed, then try <strong>Save &amp; generate plan</strong> again.
-                    </span>
-                  </div>
-                ) : null}
                 <p className="text-xs text-slate-300 leading-relaxed">{termHint}</p>
                 {importedDeadlineCount > 0 ? (
                   <p className="text-xs text-emerald-300/90">
@@ -564,8 +515,7 @@ export default function ChatClient() {
                 <div className="flex justify-end">
                   <button
                     disabled={
-                      sessionLoading ||
-                      messageSending ||
+                      loading ||
                       !timezone.trim() ||
                       !semesterStart.trim() ||
                       !semesterEnd.trim()
@@ -591,35 +541,11 @@ export default function ChatClient() {
             ) : null}
 
             {phase === 4 ? (
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-3">
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-2">
                 <div className="text-sm font-semibold text-white">Phase 4 — Study plan</div>
-                {chat?.complete ? (
-                  <div className="text-sm text-slate-300 flex items-center gap-2">
-                    <span
-                      className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/25 border-t-white/90"
-                      aria-hidden
-                    />
-                    Complete. Redirecting…
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3 text-sm text-slate-100">
-                      <span
-                        className="inline-block h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-white/25 border-t-emerald-400"
-                        aria-hidden
-                      />
-                      <span>Generating your semester study plan…</span>
-                    </div>
-                    <ul className="text-xs text-slate-400 space-y-1.5 pl-8 list-disc marker:text-slate-500">
-                      <li>Your timeline and deadlines are already saved.</li>
-                      <li>
-                        AI is building weekly goals and tasks — this often takes about half a minute,
-                        sometimes longer.
-                      </li>
-                      <li>This page updates automatically; please keep it open until we finish.</li>
-                    </ul>
-                  </div>
-                )}
+                <div className="text-sm text-slate-300">
+                  {chat?.complete ? 'Complete. Redirecting…' : 'Generating your study plan…'}
+                </div>
               </div>
             ) : null}
           </div>

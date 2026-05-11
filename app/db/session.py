@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from contextlib import contextmanager
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
@@ -36,17 +35,6 @@ def _get_sessionmaker() -> sessionmaker[Session]:
 
 
 def get_db() -> Generator[Session, None, None]:
-    SessionLocal = _get_sessionmaker()
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-@contextmanager
-def session_scope() -> Generator[Session, None, None]:
-    """Short-lived session for work outside a request (e.g. FastAPI BackgroundTasks)."""
     SessionLocal = _get_sessionmaker()
     db = SessionLocal()
     try:

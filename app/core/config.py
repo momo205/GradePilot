@@ -36,20 +36,6 @@ class Settings:
     google_oauth_client_secret: str | None
     google_oauth_redirect_uri: str | None
 
-    # Client-side retries for Gemini 429 (short windows only; daily quota still fails).
-    gemini_max_retries: int
-    gemini_retry_sleep_cap_seconds: int
-
-
-def _int_env(name: str, default: int) -> int:
-    raw = os.getenv(name)
-    if raw is None or raw.strip() == "":
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
-
 
 def get_settings() -> Settings:
     supabase_url = _get_env("SUPABASE_URL")
@@ -80,8 +66,4 @@ def get_settings() -> Settings:
         google_oauth_client_id=os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
         google_oauth_client_secret=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
         google_oauth_redirect_uri=os.getenv("GOOGLE_OAUTH_REDIRECT_URI"),
-        gemini_max_retries=max(1, _int_env("GEMINI_MAX_RETRIES", 4)),
-        gemini_retry_sleep_cap_seconds=max(
-            1, _int_env("GEMINI_RETRY_SLEEP_CAP_SECONDS", 120)
-        ),
     )

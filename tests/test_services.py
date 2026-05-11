@@ -38,8 +38,6 @@ def _mock_settings(api_key: str = "test-key", model: str = "gemini-test") -> Mag
     s = MagicMock()
     s.google_api_key = api_key
     s.google_model = model
-    s.gemini_max_retries = 4
-    s.gemini_retry_sleep_cap_seconds = 120
     return s
 
 
@@ -200,16 +198,12 @@ def test_get_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SUPABASE_JWT_ISSUER", raising=False)
     monkeypatch.delenv("SUPABASE_JWKS_URL", raising=False)
     monkeypatch.delenv("GOOGLE_MODEL", raising=False)
-    monkeypatch.delenv("GEMINI_MAX_RETRIES", raising=False)
-    monkeypatch.delenv("GEMINI_RETRY_SLEEP_CAP_SECONDS", raising=False)
 
     s = config.get_settings()
     assert s.supabase_url == "https://example.supabase.co"
     assert s.supabase_jwt_issuer == "https://example.supabase.co/auth/v1"
     assert ".well-known/jwks.json" in s.supabase_jwks_url
     assert s.google_model == "gemini-2.5-flash"
-    assert s.gemini_max_retries == 4
-    assert s.gemini_retry_sleep_cap_seconds == 120
 
 
 def test_get_settings_missing_supabase_url(monkeypatch: pytest.MonkeyPatch) -> None:
