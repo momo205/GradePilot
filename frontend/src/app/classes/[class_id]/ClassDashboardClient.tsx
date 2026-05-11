@@ -43,7 +43,7 @@ import { NotesPanel } from '@/components/study-plan/NotesPanel';
 import { PracticePanel } from '@/components/study-plan/PracticePanel';
 import { RagPanel } from '@/components/study-plan/RagPanel';
 import { PlanPanel } from '@/components/study-plan/PlanPanel';
-import { GradeBookPanel } from '@/components/study-plan/GradeBookPanel';
+import { LearningResourcesPanel } from '@/components/study-plan/LearningResourcesPanel';
 
 type Tab = 'overview' | 'deadlines' | 'notes' | 'practice';
 
@@ -385,16 +385,11 @@ export default function ClassDashboardClient({ classId }: { classId: string }) {
             </div>
           </div>
 
-          <GradeBookPanel
+          <LearningResourcesPanel
             classId={classId}
-            gradeBook={summary?.clazz.grade_book ?? null}
-            hasIndexedSyllabus={summary?.has_indexed_syllabus ?? false}
+            classTitle={classTitle}
+            hasNotes={Boolean(notes && notes.length > 0)}
             onOpenNotesTab={() => setTab('notes')}
-            onSaved={(g) => {
-              setSummary((s) =>
-                s ? { ...s, clazz: { ...s.clazz, grade_book: g } } : s
-              );
-            }}
           />
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">

@@ -172,6 +172,27 @@ export type StudyPlanOut = {
 
 export type PracticeQuestion = { q: string; a: string; source_label?: string };
 
+export type LearningResourceDestination = 'youtube' | 'web';
+
+export type LearningResourceItemOut = {
+  title: string;
+  rationale: string;
+  destination: LearningResourceDestination;
+  search_query: string;
+};
+
+export type LearningResourcesOut = {
+  items: LearningResourceItemOut[];
+  model: string;
+};
+
+export function fetchLearningResources(classId: string) {
+  return backendFetch<LearningResourcesOut>(`/classes/${classId}/learning-resources`, {
+    method: 'POST',
+    body: '{}',
+  });
+}
+
 export function generatePractice(classId: string, count: number, difficulty: string) {
   return backendFetch<{ questions: PracticeQuestion[] }>(`/classes/${classId}/practice`, {
     method: 'POST',
