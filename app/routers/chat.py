@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db import crud
@@ -18,12 +17,8 @@ from app.schemas import (
     ChatToolAction,
 )
 from app.services.chat.onboarding import run_onboarding_step
+from app.services.chat.onboarding_semester_plan_job import run_onboarding_semester_plan_job
 from app.services.datetime_parse import parse_user_due_to_datetime
-from app.services.study_plan_semester import (
-    SemesterStudyPlanGenerationError,
-    SemesterStudyPlanRateLimitError,
-    generate_semester_study_plan,
-)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -33,6 +28,27 @@ def _user_uuid(user: CurrentUser) -> uuid.UUID:
         return uuid.UUID(user.user_id)
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid user id")
+
+
+def _onboarding_done(state_json: dict[str, Any]) -> bool:
+    return bool(state_json.get("complete")) or bool(
+        state_json.get("onboarding_complete")
+    )
+
+
+def _chat_reply_fields(
+    state_json: dict[str, Any],
+) -> tuple[bool, uuid.UUID | None, str | None]:
+    complete = _onboarding_done(state_json)
+    raw_class_id = state_json.get("class_id")
+    out_class_id: uuid.UUID | None = None
+    if isinstance(raw_class_id, str):
+        try:
+            out_class_id = uuid.UUID(raw_class_id)
+        except ValueError:
+            out_class_id = None
+    next_url = f"/classes/{out_class_id}" if complete and out_class_id else None
+    return complete, out_class_id, next_url
 
 
 @router.post("/sessions", response_model=ChatSessionOut)
@@ -69,11 +85,15 @@ def get_session(
     msgs = crud.list_chat_messages(db=db, user_id=user_id, session_id=session_id)
     st = crud.get_chat_state(db=db, user_id=user_id, session_id=session_id)
     state_json: dict[str, Any] = st.state_json if st is not None else {}
+    complete, out_class_id, next_url = _chat_reply_fields(state_json)
     return ChatReplyOut(
         session=ChatSessionOut.model_validate(sess),
         messages=[ChatMessageOut.model_validate(m) for m in msgs],
         state=state_json,
         tool_actions=[],
+        complete=complete,
+        class_id=out_class_id,
+        next_url=next_url,
     )
 
 
@@ -81,6 +101,7 @@ def get_session(
 def post_message(
     session_id: uuid.UUID,
     payload: ChatMessageIn,
+    background_tasks: BackgroundTasks,
     user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ChatReplyOut:
@@ -193,53 +214,25 @@ def post_message(
                 clazz = crud.get_class(db=db, user_id=user_id, class_id=class_id)
                 if clazz is None:
                     continue
-                deadlines = crud.list_deadlines(
-                    db=db, user_id=user_id, class_id=class_id
-                )
-                deadline_payload = [
-                    {
-                        "id": str(d.id),
-                        "title": d.title,
-                        "due_text": d.due_text,
-                        "due_at": (d.due_at.isoformat() if d.due_at else None),
-                    }
-                    for d in deadlines
-                ]
                 semester_start = state_json.get("semester_start")
                 semester_end = state_json.get("semester_end")
                 tz = state_json.get("timezone")
-                availability = state_json.get("availability")
                 if not (
                     isinstance(semester_start, str)
                     and isinstance(semester_end, str)
                     and isinstance(tz, str)
                 ):
                     continue
-                try:
-                    plan_json, model_name = generate_semester_study_plan(
-                        class_title=clazz.title,
-                        semester_start=semester_start,
-                        semester_end=semester_end,
-                        timezone=tz,
-                        deadlines=deadline_payload,
-                        availability=(
-                            availability if isinstance(availability, list) else None
-                        ),
-                    )
-                except SemesterStudyPlanRateLimitError as e:
-                    raise HTTPException(status_code=429, detail=str(e))
-                except SemesterStudyPlanGenerationError as e:
-                    raise HTTPException(status_code=502, detail=str(e))
-                plan = crud.create_study_plan(
-                    db=db,
+                if state_json.get("semester_plan_status") == "generating":
+                    continue
+                state_json["semester_plan_status"] = "generating"
+                state_json.pop("semester_plan_error", None)
+                background_tasks.add_task(
+                    run_onboarding_semester_plan_job,
                     user_id=user_id,
+                    session_id=session_id,
                     class_id=class_id,
-                    source_notes_id=None,
-                    plan_json=plan_json,
-                    model=model_name,
                 )
-                state_json["latest_study_plan_id"] = str(plan.id)
-                state_json["completed_at"] = datetime.utcnow().isoformat()
 
         elif a_type == "complete":
             state_json["complete"] = True
@@ -258,14 +251,7 @@ def post_message(
     )
 
     msgs = crud.list_chat_messages(db=db, user_id=user_id, session_id=session_id)
-    raw_class_id = state_json.get("class_id")
-    out_class_id: uuid.UUID | None = None
-    if isinstance(raw_class_id, str):
-        try:
-            out_class_id = uuid.UUID(raw_class_id)
-        except ValueError:
-            out_class_id = None
-    complete = bool(state_json.get("complete")) or str(state_json.get("phase")) == "4"
+    complete, out_class_id, next_url = _chat_reply_fields(state_json)
 
     return ChatReplyOut(
         session=ChatSessionOut.model_validate(sess),
@@ -280,5 +266,5 @@ def post_message(
         ],
         complete=complete,
         class_id=out_class_id,
-        next_url=(f"/classes/{out_class_id}" if complete and out_class_id else None),
+        next_url=next_url,
     )

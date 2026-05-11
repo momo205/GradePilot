@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any
 
 import pytest
@@ -14,10 +15,11 @@ from app.db.models import Base
 from app.db.session import get_db
 from app.deps.auth import CurrentUser, get_current_user
 from app.main import app
+import app.services.chat.onboarding_semester_plan_job as onboarding_semester_plan_job
 
 
 @pytest.fixture()
-def client() -> Generator[TestClient, None, None]:
+def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]:
     engine = create_engine(
         "sqlite+pysqlite://",
         connect_args={"check_same_thread": False},
@@ -25,6 +27,16 @@ def client() -> Generator[TestClient, None, None]:
     )
     Base.metadata.create_all(bind=engine)
     SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+    @contextmanager
+    def _test_session_scope() -> Generator[Session, None, None]:
+        db = SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    monkeypatch.setattr(onboarding_semester_plan_job, "session_scope", _test_session_scope)
 
     user_id = uuid.uuid4()
 
@@ -118,6 +130,7 @@ def test_chat_post_message_executes_tool_actions_happy_path(
     assert r.status_code == 200
 
     import app.routers.chat as chat_router
+    import app.services.chat.onboarding_semester_plan_job as semester_job
 
     class _Onboarding:
         def __init__(self, state: dict[str, Any], tool_actions: list[dict[str, Any]]):
@@ -132,7 +145,9 @@ def test_chat_post_message_executes_tool_actions_happy_path(
         return ({"weeks": [{"week": 1, "tasks": ["read chapter 1"]}]}, "fake-model")
 
     monkeypatch.setattr(
-        chat_router, "generate_semester_study_plan", _fake_generate_semester_study_plan
+        semester_job,
+        "generate_semester_study_plan",
+        _fake_generate_semester_study_plan,
     )
 
     # Return tool actions that hit most branches in chat.post_message.
