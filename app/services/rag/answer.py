@@ -8,6 +8,7 @@ import uuid
 from google.api_core.exceptions import ResourceExhausted
 from google import genai
 from google.genai import types
+from google.genai.errors import ClientError
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.config import get_settings
@@ -24,6 +25,10 @@ class RagAnswerRateLimitError(RagAnswerError):
     def __init__(self, message: str, *, retry_after_seconds: int | None = None):
         super().__init__(message)
         self.retry_after_seconds = retry_after_seconds
+
+
+class RagCitationVerificationError(RagAnswerError):
+    """Returned JSON cited chunks that do not match retrieved text or ids."""
 
 
 _RETRY_RE = re.compile(r"Please retry in\s+([0-9]+(?:\.[0-9]+)?)s", re.IGNORECASE)
@@ -56,8 +61,19 @@ _SNIPPET_MAX_CHARS = 240
 
 
 def _normalize_for_citation_match(text: str) -> str:
-    """Collapse whitespace and case-fold for substring checks."""
-    return " ".join(text.split()).casefold()
+    """Collapse whitespace, case-fold, and map common unicode quotes for substring checks."""
+    # PDFs / models often use curly quotes; chunk text may use ASCII.
+    trans = str.maketrans(
+        {
+            "\u2018": "'",
+            "\u2019": "'",
+            "\u201c": '"',
+            "\u201d": '"',
+            "\u00a0": " ",
+        }
+    )
+    folded = text.translate(trans)
+    return " ".join(folded.split()).casefold()
 
 
 def verify_rag_sources(
@@ -119,10 +135,17 @@ def verify_rag_sources(
             len(sources),
             len(chunks),
         )
-        raise RagAnswerError(
+        raise RagCitationVerificationError(
             "Model citations could not be verified against retrieved materials."
         )
     return verified
+
+
+_CITATION_REMINDER = """
+CRITICAL — Your last answer failed citation checks. Fix this response:
+- Copy document_id and chunk_index EXACTLY from the [S…] line above each source (do not invent UUIDs).
+- Each snippet must be copied character-for-character from that source's body (you may only change outer whitespace); max ~240 chars.
+"""
 
 
 def _build_prompt(*, question: str, chunks: list[RetrievedChunk]) -> str:
@@ -132,7 +155,8 @@ def _build_prompt(*, question: str, chunks: list[RetrievedChunk]) -> str:
         if len(snippet) > 1200:
             snippet = snippet[:1200].rstrip() + "…"
         sources_text.append(
-            f"[S{i}] filename={c.filename} type={c.document_type} chunk={c.chunk_index}\n{snippet}"
+            f"[S{i}] document_id={c.document_id} filename={c.filename} "
+            f"type={c.document_type} chunk_index={c.chunk_index}\n{snippet}"
         )
 
     joined_sources = "\n\n".join(sources_text) if sources_text else "(no sources)"
@@ -152,8 +176,10 @@ Return ONLY valid JSON matching this schema:
 Rules:
 - The answer must be grounded in sources.
 - sources must include only the sources you actually used.
-- snippet must be a verbatim excerpt from that source (it must appear in the source
-  text aside from whitespace differences); max ~{_SNIPPET_MAX_CHARS} chars.
+- For each source you cite, copy document_id and chunk_index EXACTLY from the [S…] header
+  line for that body text (same line as "document_id=" and "chunk_index=").
+- snippet must be a verbatim excerpt from that source's body below the header (aside from
+  leading/trailing whitespace); max ~{_SNIPPET_MAX_CHARS} chars.
 - No markdown, no extra text.
 
 Question:
@@ -172,24 +198,44 @@ def generate_rag_answer(*, question: str, chunks: list[RetrievedChunk]) -> RagAn
     client = genai.Client(api_key=settings.google_api_key)
     model_name = settings.google_model
 
-    prompt = _build_prompt(question=question, chunks=chunks)
-
+    base_prompt = _build_prompt(question=question, chunks=chunks)
+    prompt = base_prompt
     raw = ""
     try:
-        resp = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.2,
-                response_mime_type="application/json",
-            ),
-        )
-        raw = resp.text or ""
-        logger.info("rag_answer_llm_response model=%s chars=%s", model_name, len(raw))
-        data = json.loads(raw)
-        parsed = RagAnswerOut.model_validate(data)
-        verified_sources = verify_rag_sources(sources=parsed.sources, chunks=chunks)
-        return RagAnswerOut(answer=parsed.answer, sources=verified_sources)
+        for attempt in range(2):
+            resp = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.2,
+                    response_mime_type="application/json",
+                ),
+            )
+            raw = resp.text or ""
+            logger.info(
+                "rag_answer_llm_response model=%s chars=%s attempt=%s",
+                model_name,
+                len(raw),
+                attempt,
+            )
+            data = json.loads(raw)
+            parsed = RagAnswerOut.model_validate(data)
+            try:
+                verified_sources = verify_rag_sources(
+                    sources=parsed.sources, chunks=chunks
+                )
+            except RagCitationVerificationError:
+                if attempt == 0:
+                    logger.warning(
+                        "rag_answer_citation_retry question_chars=%s chunks=%s",
+                        len(question),
+                        len(chunks),
+                    )
+                    prompt = base_prompt + _CITATION_REMINDER
+                    continue
+                raise
+            return RagAnswerOut(answer=parsed.answer, sources=verified_sources)
+        assert False, "rag answer loop should return or raise"
     except RagAnswerError:
         raise
     except (json.JSONDecodeError, ValidationError) as e:
@@ -202,6 +248,19 @@ def generate_rag_answer(*, question: str, chunks: list[RetrievedChunk]) -> RagAn
         raise RagAnswerRateLimitError(
             "Rate limited by Gemini API. Please retry shortly.",
             retry_after_seconds=retry_after,
+        ) from e
+    except ClientError as e:
+        code = int(getattr(e, "code", 500) or 500)
+        if code == 429:
+            retry_after = _parse_retry_after_seconds(str(e))
+            raise RagAnswerRateLimitError(
+                "Rate limited by Gemini API (quota or requests per minute). "
+                "Please retry shortly or check billing / limits at https://ai.google.dev/gemini-api/docs/rate-limits",
+                retry_after_seconds=retry_after,
+            ) from e
+        detail = getattr(e, "message", None) or str(e)
+        raise RagAnswerError(
+            f"Gemini generate_content failed (HTTP {code}): {detail}"
         ) from e
     except Exception as e:  # noqa: BLE001
         logger.exception("rag_answer_failed err=%s", e.__class__.__name__)
