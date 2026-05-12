@@ -259,7 +259,9 @@ def generate_rag_answer(*, question: str, chunks: list[RetrievedChunk]) -> RagAn
                 retry_after_seconds=retry_after,
             ) from e
         detail = getattr(e, "message", None) or str(e)
-        raise RagAnswerError(f"Gemini generate_content failed (HTTP {code}): {detail}") from e
+        raise RagAnswerError(
+            f"Gemini generate_content failed (HTTP {code}): {detail}"
+        ) from e
     except Exception as e:  # noqa: BLE001
         logger.exception("rag_answer_failed err=%s", e.__class__.__name__)
         raise RagAnswerError(f"RAG answer failed ({e.__class__.__name__})") from e

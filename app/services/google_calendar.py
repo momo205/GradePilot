@@ -753,13 +753,13 @@ def list_busy_blocks(
         for entry in cal_body.get("busy") or []:
             if not isinstance(entry, dict):
                 continue
-            s = entry.get("start")
-            e = entry.get("end")
-            if not isinstance(s, str) or not isinstance(e, str):
+            start_s = entry.get("start")
+            end_s = entry.get("end")
+            if not isinstance(start_s, str) or not isinstance(end_s, str):
                 continue
             try:
-                s_dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-                e_dt = datetime.fromisoformat(e.replace("Z", "+00:00"))
+                s_dt = datetime.fromisoformat(start_s.replace("Z", "+00:00"))
+                e_dt = datetime.fromisoformat(end_s.replace("Z", "+00:00"))
             except ValueError:
                 continue
             if s_dt.tzinfo is None or e_dt.tzinfo is None:

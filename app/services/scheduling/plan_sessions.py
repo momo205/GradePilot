@@ -97,9 +97,7 @@ def schedule_plan_day_sessions(
 
     for day_index, day_item in enumerate(schedule_items):
         if not isinstance(day_item, dict):
-            errors.append(
-                f"plan_sessions_skip:day={day_index}:invalid_schedule_item"
-            )
+            errors.append(f"plan_sessions_skip:day={day_index}:invalid_schedule_item")
             continue
         tasks_raw = day_item.get("tasks")
         tasks: list[str] = (
@@ -149,7 +147,9 @@ def schedule_plan_day_sessions(
                     user_timezone=user_timezone,
                     search_start=base_start,
                     search_end=probe_end,
-                    min_lookahead_minutes=15 if day_index == 0 and extend_days == 0 else 0,
+                    min_lookahead_minutes=(
+                        15 if day_index == 0 and extend_days == 0 else 0
+                    ),
                 )
             except Exception as e:  # noqa: BLE001
                 errors.append(
