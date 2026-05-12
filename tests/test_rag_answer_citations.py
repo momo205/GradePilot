@@ -6,7 +6,12 @@ import uuid
 
 import pytest
 
-from app.services.rag.answer import RagAnswerError, RagSourceOut, verify_rag_sources
+from app.services.rag.answer import (
+    RagAnswerError,
+    RagCitationVerificationError,
+    RagSourceOut,
+    verify_rag_sources,
+)
 from app.services.rag.retrieve import RetrievedChunk
 
 
@@ -76,6 +81,24 @@ def test_verify_whitespace_insensitive_match() -> None:
     assert len(out) == 1
 
 
+def test_verify_curly_quote_snippet_matches_ascii_chunk() -> None:
+    doc_id = uuid.uuid4()
+    chunk = _chunk(document_id=doc_id, text='The reading says "hello" to all.')
+    out = verify_rag_sources(
+        sources=[
+            RagSourceOut(
+                document_id=str(doc_id),
+                filename=chunk.filename,
+                document_type=chunk.document_type,
+                chunk_index=0,
+                snippet="\u201chello\u201d to all",
+            )
+        ],
+        chunks=[chunk],
+    )
+    assert len(out) == 1
+
+
 def test_verify_case_insensitive_snippet() -> None:
     doc_id = uuid.uuid4()
     chunk = _chunk(document_id=doc_id, text="Python uses Indentation")
@@ -116,7 +139,7 @@ def test_verify_truncates_long_snippet() -> None:
 
 def test_verify_skips_malformed_document_id() -> None:
     chunk = _chunk(text="body text")
-    with pytest.raises(RagAnswerError, match="could not be verified"):
+    with pytest.raises(RagCitationVerificationError, match="could not be verified"):
         verify_rag_sources(
             sources=[
                 RagSourceOut(
@@ -134,7 +157,7 @@ def test_verify_skips_malformed_document_id() -> None:
 def test_verify_drops_unknown_document_id() -> None:
     chunk = _chunk(text="only text")
     other_id = uuid.uuid4()
-    with pytest.raises(RagAnswerError, match="could not be verified"):
+    with pytest.raises(RagCitationVerificationError, match="could not be verified"):
         verify_rag_sources(
             sources=[
                 RagSourceOut(
@@ -152,7 +175,7 @@ def test_verify_drops_unknown_document_id() -> None:
 def test_verify_drops_wrong_chunk_index() -> None:
     doc_id = uuid.uuid4()
     chunk = _chunk(document_id=doc_id, chunk_index=0, text="alpha")
-    with pytest.raises(RagAnswerError, match="could not be verified"):
+    with pytest.raises(RagCitationVerificationError, match="could not be verified"):
         verify_rag_sources(
             sources=[
                 RagSourceOut(
@@ -170,7 +193,7 @@ def test_verify_drops_wrong_chunk_index() -> None:
 def test_verify_drops_non_substring_snippet() -> None:
     doc_id = uuid.uuid4()
     chunk = _chunk(document_id=doc_id, text="content in chunk")
-    with pytest.raises(RagAnswerError, match="could not be verified"):
+    with pytest.raises(RagCitationVerificationError, match="could not be verified"):
         verify_rag_sources(
             sources=[
                 RagSourceOut(

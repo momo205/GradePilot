@@ -150,8 +150,13 @@ def test_list_busy_blocks_returns_merged_intervals(
         "build_google_credentials_for_calendar",
         lambda **_: object(),
     )
+    monkeypatch.setattr(
+        google_calendar,
+        "get_or_create_gradepilot_calendar",
+        lambda **_: "cal-gp",
+    )
 
-    # freebusy.query returns these two adjacent intervals -> they should merge.
+    # freebusy.query returns busy on primary + GradePilot; all merge together.
     fake_response = {
         "calendars": {
             "primary": {
@@ -160,7 +165,12 @@ def test_list_busy_blocks_returns_merged_intervals(
                     {"start": "2026-09-15T14:00:00Z", "end": "2026-09-15T15:30:00Z"},
                     {"start": "2026-09-16T10:00:00Z", "end": "2026-09-16T11:00:00Z"},
                 ]
-            }
+            },
+            "cal-gp": {
+                "busy": [
+                    {"start": "2026-09-16T11:00:00Z", "end": "2026-09-16T12:00:00Z"},
+                ]
+            },
         }
     }
 
@@ -190,7 +200,7 @@ def test_list_busy_blocks_returns_merged_intervals(
 
     assert captured_body["timeMin"].startswith("2026-09-15")
     assert captured_body["timeMax"].startswith("2026-09-17")
-    assert captured_body["items"] == [{"id": "primary"}]
+    assert captured_body["items"] == [{"id": "primary"}, {"id": "cal-gp"}]
 
     assert out == [
         (
@@ -199,7 +209,7 @@ def test_list_busy_blocks_returns_merged_intervals(
         ),
         (
             datetime(2026, 9, 16, 10, 0, tzinfo=timezone.utc),
-            datetime(2026, 9, 16, 11, 0, tzinfo=timezone.utc),
+            datetime(2026, 9, 16, 12, 0, tzinfo=timezone.utc),
         ),
     ]
 
@@ -402,10 +412,18 @@ def test_list_busy_blocks_freebusy_errors_returns_empty(
         "build_google_credentials_for_calendar",
         lambda **_: object(),
     )
+    monkeypatch.setattr(
+        google_calendar,
+        "get_or_create_gradepilot_calendar",
+        lambda **_: "cal-gp",
+    )
 
     fake_query = MagicMock()
     fake_query.execute.return_value = {
-        "calendars": {"primary": {"errors": [{"reason": "notFound"}]}}
+        "calendars": {
+            "primary": {"errors": [{"reason": "notFound"}]},
+            "cal-gp": {"busy": []},
+        }
     }
     fake_freebusy = MagicMock()
     fake_freebusy.query.return_value = fake_query

@@ -2,8 +2,8 @@
 
 Given a freshly-persisted study plan, book one 60-minute calendar block per
 day in the plan's schedule on the user's GradePilot calendar. Idempotent on
-``(plan_id, day_index)`` via ``upsert_plan_day_event`` so re-runs patch the
-same events instead of duplicating.
+``(plan_id, day_index)`` via ``upsert_plan_day_event`` so each plan day keeps
+its own event (re-runs patch in place instead of duplicating).
 
 Pure failure semantics: per-day failures are returned in ``errors`` rather
 than raised, mirroring the replanner-node contract so callers (the replanner
@@ -24,7 +24,7 @@ from app.db import crud
 from app.services.google_calendar import (
     has_required_scopes,
     list_busy_blocks,
-    upsert_daily_study_session_event,
+    upsert_plan_day_event,
 )
 from app.services.scheduling.slot_finder import find_first_available_slot
 
@@ -97,6 +97,9 @@ def schedule_plan_day_sessions(
 
     for day_index, day_item in enumerate(schedule_items):
         if not isinstance(day_item, dict):
+            errors.append(
+                f"plan_sessions_skip:day={day_index}:invalid_schedule_item"
+            )
             continue
         tasks_raw = day_item.get("tasks")
         tasks: list[str] = (
@@ -108,17 +111,22 @@ def schedule_plan_day_sessions(
         target_date = today_local + timedelta(days=day_index)
         day_start_local = datetime.combine(target_date, time(0, 0), tzinfo=tz)
         day_end_local = day_start_local + timedelta(days=1)
-        search_start = max(now, day_start_local.astimezone(timezone.utc))
-        search_end = day_end_local.astimezone(timezone.utc)
-        if search_end <= search_start:
+        base_start = max(now, day_start_local.astimezone(timezone.utc))
+        if day_end_local.astimezone(timezone.utc) <= base_start:
+            errors.append(f"plan_sessions_skip:day={day_index}:day_already_elapsed")
             continue
 
+        # One freebusy range: primary + GradePilot busy through a small spill
+        # horizon so later days can find a slot even if the target calendar day
+        # is packed (we still create one event per plan day).
+        spill_horizon_end_local = day_start_local + timedelta(days=8)
+        busy_end = spill_horizon_end_local.astimezone(timezone.utc)
         try:
             busy_blocks = list_busy_blocks(
                 db=db,
                 user_id=str(user_id),
-                start=search_start,
-                end=search_end,
+                start=base_start,
+                end=busy_end,
             )
         except Exception as e:  # noqa: BLE001
             errors.append(
@@ -126,42 +134,56 @@ def schedule_plan_day_sessions(
             )
             continue
 
-        try:
-            slot = find_first_available_slot(
-                busy_blocks=busy_blocks,
-                preferred_windows=safe_windows,
-                user_timezone=user_timezone,
-                search_start=search_start,
-                search_end=search_end,
-                # Day 0 keeps a small lookahead so we don't book a slot
-                # already in flight; later days start at midnight so the
-                # lookahead is moot.
-                min_lookahead_minutes=15 if day_index == 0 else 0,
-            )
-        except Exception as e:  # noqa: BLE001
-            errors.append(
-                f"plan_sessions_slot_failed:day={day_index}:{e.__class__.__name__}"
-            )
-            continue
+        slot = None
+        for extend_days in range(0, 7):
+            probe_end_local = day_start_local + timedelta(days=1 + extend_days)
+            probe_end = probe_end_local.astimezone(timezone.utc)
+            if probe_end > busy_end:
+                probe_end = busy_end
+            if probe_end <= base_start:
+                continue
+            try:
+                slot = find_first_available_slot(
+                    busy_blocks=busy_blocks,
+                    preferred_windows=safe_windows,
+                    user_timezone=user_timezone,
+                    search_start=base_start,
+                    search_end=probe_end,
+                    min_lookahead_minutes=15 if day_index == 0 and extend_days == 0 else 0,
+                )
+            except Exception as e:  # noqa: BLE001
+                errors.append(
+                    f"plan_sessions_slot_failed:day={day_index}:{e.__class__.__name__}"
+                )
+                slot = None
+                break
+            if slot is not None:
+                break
 
         if slot is None:
             errors.append(f"plan_sessions_skip:day={day_index}:no_slot_found")
             continue
 
         day_label = str(day_item.get("day") or "").strip() or f"Day {day_index + 1}"
-        date_local_iso = target_date.isoformat()
+        desc_lines = [
+            f"Study plan: {day_label}",
+            "",
+            "Tasks:",
+            *(f"- {t}" for t in tasks),
+        ]
+        description = "\n".join(desc_lines).strip()
 
         try:
-            event = upsert_daily_study_session_event(
+            event = upsert_plan_day_event(
                 db=db,
                 user_id=str(user_id),
                 class_id=class_id,
-                date_local_iso=date_local_iso,
-                day_label=day_label,
-                class_title=class_title,
-                tasks=tasks,
+                plan_id=plan_id,
+                day_index=day_index,
+                title=f"{class_title} — {day_label}",
                 start=slot.start,
                 end=slot.end,
+                description=description,
             )
         except Exception as e:  # noqa: BLE001
             errors.append(

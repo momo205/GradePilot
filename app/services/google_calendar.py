@@ -675,10 +675,13 @@ def list_busy_blocks(
     start: datetime,
     end: datetime,
 ) -> list[tuple[datetime, datetime]]:
-    """Return merged busy blocks from the user's primary Google calendar.
+    """Return merged busy blocks from the user's primary and GradePilot calendars.
 
     Uses ``freebusy.query`` (not ``events.list``) — it is cheaper and Google
     returns exactly the busy intervals we need, already merged per-calendar.
+    Intervals from every requested calendar are merged so scheduling avoids
+    overlapping events already placed on the GradePilot calendar.
+
     Returns an empty list (not an error) when:
       - the user has no Google integration connected
       - the stored grant doesn't cover the scopes we need (caller should
@@ -718,34 +721,49 @@ def list_busy_blocks(
     )
     svc = build("calendar", "v3", credentials=creds, cache_discovery=False)
 
+    items: list[dict[str, str]] = [{"id": "primary"}]
+    try:
+        gp_calendar_id = get_or_create_gradepilot_calendar(creds=creds)
+        if gp_calendar_id and all(i.get("id") != gp_calendar_id for i in items):
+            items.append({"id": gp_calendar_id})
+    except Exception as e:  # noqa: BLE001
+        logger.info(
+            "list_busy_blocks: gradepilot calendar id unavailable err=%s",
+            e.__class__.__name__,
+        )
+
     body = {
         "timeMin": start.astimezone(timezone.utc).isoformat(),
         "timeMax": end.astimezone(timezone.utc).isoformat(),
-        "items": [{"id": "primary"}],
+        "items": items,
     }
     resp = svc.freebusy().query(body=body).execute()
     calendars = resp.get("calendars") or {}
-    primary = calendars.get("primary") or {}
-    if primary.get("errors"):
-        logger.info("list_busy_blocks: freebusy returned errors=%s", primary["errors"])
-        return []
-
-    raw_busy = primary.get("busy") or []
     intervals: list[tuple[datetime, datetime]] = []
-    for entry in raw_busy:
-        if not isinstance(entry, dict):
+    for cal_key, cal_body in calendars.items():
+        if not isinstance(cal_body, dict):
             continue
-        s = entry.get("start")
-        e = entry.get("end")
-        if not isinstance(s, str) or not isinstance(e, str):
+        if cal_body.get("errors"):
+            logger.info(
+                "list_busy_blocks: calendar %s errors=%s",
+                cal_key,
+                cal_body.get("errors"),
+            )
             continue
-        try:
-            s_dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-            e_dt = datetime.fromisoformat(e.replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        if s_dt.tzinfo is None or e_dt.tzinfo is None:
-            continue
-        intervals.append((s_dt, e_dt))
+        for entry in cal_body.get("busy") or []:
+            if not isinstance(entry, dict):
+                continue
+            s = entry.get("start")
+            e = entry.get("end")
+            if not isinstance(s, str) or not isinstance(e, str):
+                continue
+            try:
+                s_dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+                e_dt = datetime.fromisoformat(e.replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if s_dt.tzinfo is None or e_dt.tzinfo is None:
+                continue
+            intervals.append((s_dt, e_dt))
 
     return _merge_intervals(intervals)
